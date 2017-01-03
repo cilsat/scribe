@@ -1,0 +1,38 @@
+Scribe is a speaker diarization and speech recognition program
+
+Scribe consists of 5 components:
+- Front end
+    - Short term audio feature extraction using MFCC
+    - Phone segments extraction using Kaldi utilizing a pre-trained monophone
+      for k-segmental means clustering
+    - TODO: VAD
+- Speaker change detection
+    - TODO: Phone class detection/classification
+        - Classes could include spoken/non-spoken/music/noise
+        - This probably requires lots of manual labeling for classifier training
+    - Speaker change detection using phone segments and associated heuristics
+        - Input is phone segments and their corresponding frames
+        - Output is speaker segments
+        - Training data consists of concactenated utterances
+        - Try male-female, male-male, then female-female
+- Speaker clustering
+    - Group speaker segments using some online unsupervised learning algo
+        - Input is speaker segments
+        - Output is speaker labels
+- Speaker identification
+    - Assume some manner of enrollment is to be implemented
+    - Generate UBM during training
+    - Store adapted speaker models in DB during enrollment
+    - Generate a speaker model from the phone segments within speaker segments
+      of the same speaker label. The speaker model should be retained throughout
+      the session to improve recognition performance.
+    - Adapt the model on the fly
+    - Compare adapted model to the adapted speaker models stored in DB and
+      generate a similarity value.
+    - Return n highest similarities and also decide on the winner
+- Controller
+    - Runs and coordinates the other components
+    - Returns results to some view
+
+Each scribe component works on its own thread ensuring that we're not stuck
+waiting for the output of one process to get what we need at any one time
