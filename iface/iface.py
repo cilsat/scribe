@@ -7,7 +7,8 @@ import multiprocessing as mp
 # read kaldi phone alignment file and return a dataframe indexed by utt/file
 # location and duration are in milliseconds and encoded to unsigned integer
 # read Kaldi raw MFCC frames file and return a DataFrame indexed by utt/file
-def ali2df(ali_file, raw='phon'):
+def ali2df(args):
+    ali_file, raw = args
     if raw == 'phon':
         df = pd.read_csv(ali_file, delimiter=' ', header=None, index_col=0, usecols=[0, 2, 3, 4], names=['index', 'pos', 'dur', 'phon'])
         df.loc[:, ['pos', 'dur']] = (df.loc[:, ['pos', 'dur']]*100).astype(np.uint16)

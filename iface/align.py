@@ -20,16 +20,25 @@ def roll_delta(args):
 
     df_d = delta(a)
     df_dd = delta(df_d)
-    return pd.concat((df_d, df_dd), axis=1).astype(np.float16)
+    return pd.concat((a, df_d, df_dd), axis=1).astype(np.float16)
 
-def apply_parallel(df_group, func, args):
-    args = [[g] + args for _, g in df_group]
+def count_phones(args):
+    pg, mg = args
+    lpg = len(pg)
+    lmg = len(mg)
+    ali_idx = [x for n in [[i]*pg.dur[i] for i in xrange(lpg - 1)] for x in n]
+    ali_idx.extend([ali_idx[-1] + 1 for _ in xrange(lmg - len(ali_idx))])
+    mg['ord'] = np.array(ali_idx, dtype=np.uint8)
+    return mg
+
+# parallelize functions applied to dataframe groups
+def apply_parallel(func, args=()):
     p = Pool(cpu_count())
     ret = p.map(func, args)
     p.close()
     p.terminate()
     p.join()
-    return pd.concat(ret).astype(np.float16)
+    return pd.concat(ret)
 
 # computes delta features in place
 def compute_deltas(df_mfcc, n=2):
@@ -37,19 +46,63 @@ def compute_deltas(df_mfcc, n=2):
     mg = df_mfcc.groupby(df_mfcc.index)
     w = np.array([n for n in xrange(-n, n+1)])
     d = 1./np.sum([2*i*i for i in xrange(1, n+1)])
-    df_deltas = apply_parallel(mg, roll_delta, [n, w, d]) 
+    df_deltas = apply_parallel(roll_delta, [(g, n, w, d) for _,g in mg])
+
+    # fix column names
     n_feats = len(df_mfcc.columns)
-    df_deltas.columns = ['d_' + c for c in df_deltas.columns[:n_feats]] + ['dd_' + c for c in df_deltas.columns[n_feats:]]
-    return pd.concat((df_mfcc, df_deltas)).astype(np.float16)
+    c1 = [c for c in df_mfcc.columns]
+    c2 = ['d_' + c for c in df_deltas.columns[n_feats:2*n_feats]]
+    c3 = ['dd_' + c for c in df_deltas.columns[2*n_feats:]]
+    df_deltas.columns = c1 + c2 + c3
+    return df_deltas
 
 # align raw mfcc dataframe to raw phone dataframe
 # return raw mfcc frames with phone segment label
-def ali_mfcc_phon(df_mfcc, df_phon):
+def align_phones(df_mfcc, df_phon):
     # use the minimal subset of utt/files contained in both dataframes
+    # drop utterances with only 1 phone
     dif = set(df_mfcc.index) ^ set(df_phon.index)
-    df_mfcc.drop(dif, inplace=True)
-    df_phon.drop(dif, inplace=True)
+    drop = set(df_phon.loc[df_phon.groupby(df_phon.index).dur.count() == 1].index)
+    drop |= dif
+    df_mfcc.drop(drop, inplace=True)
+    df_phon.drop(drop, inplace=True)
 
-    # align features to phone boundaries
-    pg_pos = df_phon.groupby(df_phon.index)['pos']
+    # construct indices of frames from phone alignments
+    pg = df_phon.groupby(df_phon.index)
+    mg = df_mfcc.groupby(df_mfcc.index)
+    return apply_parallel(count_phones, [(g, mg.get_group(n)) for n, g in pg])
 
+# process all alignment files in a given directory
+# MFCC files are assumed to begin with 'mfcc' and phone alignments files with
+# 'phon'.
+def process_path(path):
+    import iface, os
+    import cPickle as pickle
+
+    print("parsing files")
+    mfcc_args = []
+    phon_args = []
+    for f in os.listdir(path):
+        if f.startswith('mfcc'):
+            mfcc_args.append((os.path.join(path, f), 'mfcc'))
+        elif f.startswith('phon'):
+            phon_args.append((os.path.join(path, f), 'phon'))
+
+    mfccs = apply_parallel(iface.ali2df, mfcc_args)
+    phons = apply_parallel(iface.ali2df, phon_args)
+    print(mfccs.info())
+    print(phons.info())
+
+    print("\ncomputing deltas")
+    try:
+        mfccs = compute_deltas(mfccs)
+        print(mfccs.info())
+    except: pickle.dumps(mfccs, open('mfcc-dump.pk', 'wb'), -1)
+    return phons, mfccs
+
+    print("\naligning phones")
+    try:
+        mfccs = align_phones(mfccs, phons)
+        print(mfccs.info())
+    except: pickle.dumps(mfccs, open('ali-dump.pk', 'wb'), -1)
+    return mfccs

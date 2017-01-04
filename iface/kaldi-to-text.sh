@@ -17,14 +17,12 @@ fi
 # get raw mfcc frames for given test folder
 for n in `ls $mfcc_path`
 do
-  echo $n
   for i in `ls $mfcc_path/$n/data/*mfcc*ark`
   do
     set=${i%.ark}
-    echo "$set"
     copy-feats ark:$i ark,t:$set.mfc
   done && \
-  cat $mfcc_path/$n/.mfc >> $out_path/mfcc-$n.ali &
+  cat $mfcc_path/$n/data/*.mfc > $out_path/mfcc-$n.ali &
 done
 
 # get best path phone alignment from lattice in given folder
@@ -33,7 +31,6 @@ do
   for i in `ls $lat_path/$n/$dec_path/lat*gz`
   do
     set=${i%.gz}
-    echo "$set"
     lattice-align-phones --replace-output-symbols=true \
       $lat_path/$n/final.mdl \
       ark:"gunzip -c $i|" \
@@ -42,5 +39,5 @@ do
       ark:- | nbest-to-ctm \
       ark:- $set.ctm
   done && \
-  cat $lat_path/$n/*.ctm >> $out_path/phon-$n.ali &
+  cat $lat_path/$n/$dec_path/*.ctm >> $out_path/phon-$n.ali &
 done
