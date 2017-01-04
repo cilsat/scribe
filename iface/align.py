@@ -10,14 +10,19 @@ from multiprocessing import Pool, cpu_count
 # python_speech_features/blob/master/python_speech_features/base.py
 def roll_delta(args):
     a, n, w, d = args
-    delta = pd.concat((pd.DataFrame([a.iloc[0] for _ in xrange(n)]),
-        a, pd.DataFrame([a.iloc[-1] for _ in xrange(n)])))
-    delta[:] = delta.rolling(window=2*n+1, center=True).apply(lambda x: np.sum(w.T*x, axis=0)*d)
-    delta.dropna(inplace=True)
-    return delta
 
-def apply_parallel(dfg, func, args):
-    args = [[g] + args for _, g in dfg]
+    def delta(df):
+        df_ret = pd.concat((pd.DataFrame([df.iloc[0] for _ in xrange(n)], dtype=np.float16), df, pd.DataFrame([df.iloc[-1] for _ in xrange(n)], dtype=np.float16)))
+        df_ret[:] = df_ret.rolling(window=2*n+1, center=True).apply(lambda x: np.sum(w.T*x, axis=0)*d)
+        df_ret.dropna(inplace=True)
+        return df_ret
+
+    df_d = delta(a)
+    df_dd = delta(df_d)
+    return pd.concat((df_d, df_dd), axis=1)
+
+def apply_parallel(df_group, func, args):
+    args = [[g] + args for _, g in df_group]
     p = Pool(cpu_count())
     ret = p.map(func, args)
     p.close()
@@ -33,12 +38,16 @@ def ali_mfcc_phon(df_mfcc, df_phon):
     df_mfcc.drop(dif, inplace=True)
     df_phon.drop(dif, inplace=True)
 
-    # group features by utterance and apply delta function on each utterance
+    # group features by utterance and compute deltas/delta-deltas
     mg = df_mfcc.groupby(df_mfcc.index)
     n = 2
     w = np.array([n for n in xrange(-n, n+1)])
     d = 1./np.sum([2*i*i for i in xrange(1, n+1)])
-    deltas = apply_parallel(mg, roll_delta, [n, w, d]) 
-    deltas.columns = ['d_' + col for col in delta.columns]
+    df_deltas = apply_parallel(mg, roll_delta, [n, w, d]) 
+    n_feats = len(df_mfcc.columns)
+    df_deltas.columns = ['d_' + c for c in df_deltas.columns[:n_feats]] + ['dd_' + c for c in df_deltas.columns[n_feats:]]
+    return df_deltas
 
-    return deltas
+    # align features to phone boundaries
+    pg_pos = df_phon.groupby(df_phon.index)['pos']
+
