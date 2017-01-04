@@ -22,8 +22,8 @@ do
   do
     set=${i%.ark}
     echo "$set"
-    copy-feats ark:$i ark,t:$set.mfc && \
-  done
+    copy-feats ark:$i ark,t:$set.mfc
+  done && \
   cat $mfcc_path/$n/.mfc >> $out_path/mfcc-$n.ali &
 done
 
@@ -40,7 +40,7 @@ do
       ark:$set.lat && \
     lattice-1best ark:$set.lat \
       ark:- | nbest-to-ctm \
-      ark:- $set.ctm && \
-  done
+      ark:- $set.ctm
+  done && \
   cat $lat_path/$n/*.ctm >> $out_path/phon-$n.ali &
 done
