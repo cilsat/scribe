@@ -23,8 +23,8 @@ do
     set=${i%.ark}
     echo "$set"
     copy-feats ark:$i ark,t:$set.mfc && \
-    cat $set.mfc >> $out_path/mfcc-$n.ali &
   done
+  cat $mfcc_path/$n/.mfc >> $out_path/mfcc-$n.ali &
 done
 
 # get best path phone alignment from lattice in given folder
@@ -41,6 +41,6 @@ do
     lattice-1best ark:$set.lat \
       ark:- | nbest-to-ctm \
       ark:- $set.ctm && \
-    cat $set.ctm >> $out_path/phon-$n.ali &
   done
+  cat $lat_path/$n/*.ctm >> $out_path/phon-$n.ali &
 done
