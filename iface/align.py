@@ -112,7 +112,7 @@ def process_path(path):
 # compute segment-level features for utterance classification from a phone
 # aligned mfcc dataframe. features include per segment frame averages, variances
 # and their deltas.
-def compute_seg_feats(df_ali):
+def compute_utt_feats(df_ali):
     dfg_ali = df_ali.groupby([df_ali.index, df_ali['ord']])
     dur = pd.Series(dfg_ali.eng.count(), name='dur', dtype=np.uint16)
     means = dfg_ali.mean()
@@ -122,12 +122,15 @@ def compute_seg_feats(df_ali):
     feats = pd.concat((dur, means), axis=1)
 
     dmeans = feats.groupby(feats.index.get_level_values(0)).diff()
-    ddmeans = dmeans.groupby(dmeans.index.get_level_values(0)).diff()
     dmeans.fillna(0, inplace=True)
+
+    ddmeans = dmeans.groupby(dmeans.index.get_level_values(0)).diff()
     ddmeans.fillna(0, inplace=True)
 
-    return pd.concat((feats, dmeans, ddmeans), axis=1)
+    dmeans.columns = ['d_' + c for c in dmeans.columns]
+    ddmeans.columns = ['dd_' + c for c in ddmeans.columns]
 
-def compute_utt_feats(df_seg):
-    
+    feats = pd.concat((feats, dmeans, ddmeans), axis=1)
+
+    return feats
 
