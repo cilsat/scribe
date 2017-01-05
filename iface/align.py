@@ -1,5 +1,8 @@
 #!/usr/bin/python2
 
+# methods for feature computation and alignment at the frame and utterance
+# levels.
+
 import pandas as pd
 import numpy as np
 from multiprocessing import Pool, cpu_count
@@ -27,7 +30,7 @@ def count_phones(args):
     lmg = len(mg)
     ali_idx = [x for n in [[i]*pg.dur[i] for i in xrange(lpg - 1)] for x in n]
     ali_idx.extend([ali_idx[-1] + 1 for _ in xrange(lmg - len(ali_idx))])
-    mg['ord'] = np.array(ali_idx, dtype=np.uint8)
+    mg['ord'] = np.array(ali_idx, dtype=np.uint16)
     return mg
 
 # parallelize functions applied to dataframe groups
@@ -36,7 +39,6 @@ def apply_parallel(func, args=()):
     ret = p.map(func, args)
     p.close()
     p.terminate()
-    p.join()
     return pd.concat(ret)
 
 # computes delta features in place
@@ -73,7 +75,8 @@ def align_phones(df_mfcc, df_phon):
 
 # process all alignment files in a given directory
 # MFCC files are assumed to begin with 'mfcc' and phone alignments files with
-# 'phon'.
+# 'phon'. returns dataframe indexed by utterance name containing mfccs,
+# delta/delta2s, and phone order within utterance
 def process_path(path):
     import iface, os
     import cPickle as pickle
@@ -105,3 +108,26 @@ def process_path(path):
         print(mfccs.info())
     except: pickle.dumps(mfccs, open('ali-dump.pk', 'wb'), -1)
     return mfccs
+
+# compute segment-level features for utterance classification from a phone
+# aligned mfcc dataframe. features include per segment frame averages, variances
+# and their deltas.
+def compute_seg_feats(df_ali):
+    dfg_ali = df_ali.groupby([df_ali.index, df_ali['ord']])
+    dur = pd.Series(dfg_ali.eng.count(), name='dur', dtype=np.uint16)
+    means = dfg_ali.mean()
+    means.columns = ['avg_' + c for c in means.columns]
+    #covs = dfg_ali.var()
+    #covs.columns = ['var_' + c for c in covs.columns]
+    feats = pd.concat((dur, means), axis=1)
+
+    dmeans = feats.groupby(feats.index.get_level_values(0)).diff()
+    ddmeans = dmeans.groupby(dmeans.index.get_level_values(0)).diff()
+    dmeans.fillna(0, inplace=True)
+    ddmeans.fillna(0, inplace=True)
+
+    return pd.concat((feats, dmeans, ddmeans), axis=1)
+
+def compute_utt_feats(df_seg):
+    
+
