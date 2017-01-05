@@ -137,5 +137,8 @@ def compute_utt_feats(df_ali):
 
     feats = pd.concat((dur, means, ddur.astype(np.int16), dmeans, dddur.astype(np.int16), ddmeans), axis=1)
 
-    return feats
+    dfg_feat = feats.groupby(feats.index.get_levels_values(0))
+    utts = pd.concat((dfg_feat.mean(), dfg_feat.var()), axis=1)
+
+    return utts
 
