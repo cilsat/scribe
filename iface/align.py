@@ -114,23 +114,28 @@ def process_path(path):
 # and their deltas.
 def compute_utt_feats(df_ali):
     dfg_ali = df_ali.groupby([df_ali.index, df_ali['ord']])
-    dur = pd.Series(dfg_ali.eng.count(), name='dur', dtype=np.uint16)
-    means = dfg_ali.mean()
-    means.columns = ['avg_' + c for c in means.columns]
-    #covs = dfg_ali.var()
-    #covs.columns = ['var_' + c for c in covs.columns]
-    feats = pd.concat((dur, means), axis=1)
 
-    dmeans = feats.groupby(feats.index.get_level_values(0)).diff()
+    dur = pd.Series(dfg_ali.eng.count(), name='dur', dtype=np.int16)
+    ddur = dur.groupby(dur.index.get_level_values(0)).diff()
+    dddur = ddur.groupby(ddur.index.get_level_values(0)).diff()
+    ddur.fillna(0, inplace=True)
+    dddur.fillna(0, inplace=True)
+
+    means = dfg_ali.mean()
+
+    dmeans = means.groupby(means.index.get_level_values(0)).diff()
     dmeans.fillna(0, inplace=True)
 
     ddmeans = dmeans.groupby(dmeans.index.get_level_values(0)).diff()
     ddmeans.fillna(0, inplace=True)
 
+    ddur.name = 'ddur'
+    dddur.name = 'dddur'
+    means.columns = ['avg_' + c for c in means.columns]
     dmeans.columns = ['d_' + c for c in dmeans.columns]
     ddmeans.columns = ['dd_' + c for c in ddmeans.columns]
 
-    feats = pd.concat((feats, dmeans, ddmeans), axis=1)
+    feats = pd.concat((dur, means, ddur.astype(np.int16), dmeans, dddur.astype(np.int16), ddmeans), axis=1)
 
     return feats
 
