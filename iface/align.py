@@ -4,7 +4,6 @@ import pandas as pd
 import numpy as np
 from multiprocessing import Pool, cpu_count
 
-
 # calculate delta and delta-delta features in an utterance
 # delta computation modified from https://github.com/jameslyons/
 # python_speech_features/blob/master/python_speech_features/base.py
