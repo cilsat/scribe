@@ -24,15 +24,8 @@ def ali2df(ali_file, raw):
 
 # write dataframe as a group in an HDF file with utt/files as separate datasets
 def df2hdf(df, df_name, hdf_file):
-    import h5py
-    with h5py.File(hdf_file, 'w') as f:
-        g = f.create_group(df_name)
-        for i in df.index.unique():
-            data = df.loc[i].values
-            g.create_dataset(name=i, data=data)
-    #df.to_hdf(hdf_file, df_name, mode='a', format='table', data_columns=True)
+    df.to_hdf(hdf_file, df_name)
 
 # read all groups in an HDF file to a dataframe
-def hdf2df(hdf_file, group_name):
-    import h5py
-    with h5py.File(hdf_file) as f: return f[group_name]['table'][:]
+def hdf2df(hdf_file, df_name):
+    return pd.read_hdf(hdf_file, df_name)

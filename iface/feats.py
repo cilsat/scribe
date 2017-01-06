@@ -34,8 +34,7 @@ def roll_delta(dfg, n=2):
     nd_d = delta(dfg.values)
     nd_dd = delta(nd_d)
 
-    return pd.concat((dfg,
-        pd.DataFrame(nd_d, index=dfg.index, dtype=np.float16),
+    return pd.concat((pd.DataFrame(nd_d, index=dfg.index, dtype=np.float16),
         pd.DataFrame(nd_dd, index=dfg.index, dtype=np.float16)), axis=1)
 
 # computes delta features in parallel
@@ -45,11 +44,9 @@ def compute_deltas(df_mfcc, n=2):
     df_deltas = apply_parallel(roll_delta, [(g, n) for _, g in mg])
 
     # fix column names
-    n_feats = len(df_mfcc.columns)
-    c1 = [c for c in df_mfcc.columns]
-    c2 = ['d_' + c for c in df_mfcc.columns]
-    c3 = ['dd_' + c for c in df_mfcc.columns]
-    df_deltas.columns = c1 + c2 + c3
+    c_d = ['d_' + c for c in df_mfcc.columns]
+    c_dd = ['dd_' + c for c in df_mfcc.columns]
+    df_deltas.columns = c_d + c_dd
     return df_deltas
 
 
@@ -88,7 +85,7 @@ def align_phones(df_mfcc, df_phon):
 # delta/delta2s, and phone order within utterance
 def process_path(path, output='ali.hdf'):
     import iface, os
-    import cPickle as pickle
+    outpath = os.path.join(path, output)
 
     print("parsing files")
     mfcc_args = []
@@ -99,22 +96,29 @@ def process_path(path, output='ali.hdf'):
         elif f.startswith('phon'):
             phon_args.append((os.path.join(path, f), 'phon'))
 
-    mfccs = apply_parallel(iface.ali2df, mfcc_args)
-    phons = apply_parallel(iface.ali2df, phon_args)
-    print(mfccs.info())
-    print(phons.info())
-    mfccs.to_hdf(output, 'raw')
+    mfcc = apply_parallel(iface.ali2df, mfcc_args)
+    phon = apply_parallel(iface.ali2df, phon_args)
+    print(mfcc.info())
+    print(phon.info())
+
+    print("\nwriting raw MFCCs and phone alignments to hdf")
+    mfcc.to_hdf(outpath, 'mfcc')
+    phon.to_hdf(outpath, 'phon')
 
     print("\ncomputing deltas")
-    mfccs = compute_deltas(mfccs)
-    print(mfccs.info())
+    delta = compute_deltas(mfcc)
+    print(delta.info())
+
+    print("\nwriting deltas to hdf")
+    delta.to_hdf(outpath, 'delta')
 
     print("\naligning phones")
-    mfccs = align_phones(mfccs, phons)
-    print(mfccs.info())
+    ali = align_phones(pd.concat((mfcc, delta), axis=1), phon)
+    del mfcc, delta, phon
+    print(ali.info())
 
-    mfccs.to_hdf(output, 'ali')
-    phons.to_hdf(output, 'phon')
+    print("\nwriting dataframe to hdf file")
+    ali.to_hdf(outpath, 'ali')
 
 
 # compute segment-level features for utterance classification from a phone
