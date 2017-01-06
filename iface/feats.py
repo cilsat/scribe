@@ -5,13 +5,14 @@
 
 import pandas as pd
 import numpy as np
+import segmentaxis
 from multiprocessing import Pool, cpu_count
 from itertools import zip_longest
+from segmentaxis import segment_axis as sa
 
 # parallelize functions applied to dataframe groups
 # it should be noted that this is *very inefficient* for multi-indexed groups
-# i.e. dataframes grouped on more than one axis due to, i believe, poor pickle
-# performance
+# i.e. dataframes grouped on more than one axis due to pickling
 def apply_parallel(func, args):
     with Pool(cpu_count()) as p:
         ret = p.starmap(func, args)
@@ -21,32 +22,31 @@ def apply_parallel(func, args):
 # calculate delta and delta-delta features in an utterance dataframe
 # delta computation modified from https://github.com/jameslyons/
 # python_speech_features/blob/master/python_speech_features/base.py
-def roll_delta(dfg, n, w, d):
-    def delta(df):
-        df_ret = pd.concat((pd.DataFrame([df.iloc[0] for _ in range(n)]),
-            df, pd.DataFrame([df.iloc[-1] for _ in range(n)]))).astype(np.float16)
-        df_ret[:] = df_ret.rolling(window=2*n+1, center=True).apply(lambda x: np.sum(w.T*x, axis=0)*d)
-        df_ret.dropna(inplace=True)
-        return df_ret
+def roll_delta(dfg, n=2):
+    w = np.arange(-n, n+1)
+    d = 1./np.sum([2*i*i for i in range(1, n+1)])
 
-    df_d = delta(dfg)
-    df_dd = delta(df_d)
-    return pd.concat((dfg, df_d, df_dd), axis=1).astype(np.float16)
+    delta = lambda nd: np.sum(sa(np.concatenate(([nd[0] for _ in range(n)], nd,
+            [nd[-1] for _ in range(n)])), n*2+1, n*2, 0).swapaxes(1,2) * w, axis=-1)*d
 
+    nd_d = delta(dfg.values)
+    nd_dd = delta(nd_d)
+
+    return pd.concat((dfg,
+        pd.DataFrame(nd_d, index=dfg.index, dtype=np.float16),
+        pd.DataFrame(nd_dd, index=dfg.index, dtype=np.float16)), axis=1)
 
 # computes delta features in place
 def compute_deltas(df_mfcc, n=2):
     # group features by utterance and compute deltas/delta-deltas
     mg = df_mfcc.groupby(df_mfcc.index)
-    w = np.array([n for n in range(-n, n+1)])
-    d = 1./np.sum([2*i*i for i in range(1, n+1)])
-    df_deltas = apply_parallel(roll_delta, [(g, n, w, d) for _, g in mg])
+    df_deltas = apply_parallel(roll_delta, [(g, n) for _, g in mg])
 
     # fix column names
     n_feats = len(df_mfcc.columns)
     c1 = [c for c in df_mfcc.columns]
-    c2 = ['d_' + c for c in df_deltas.columns[n_feats:2*n_feats]]
-    c3 = ['dd_' + c for c in df_deltas.columns[2*n_feats:]]
+    c2 = ['d_' + c for c in df_mfcc.columns]
+    c3 = ['dd_' + c for c in df_mfcc.columns]
     df_deltas.columns = c1 + c2 + c3
     return df_deltas
 
@@ -101,6 +101,7 @@ def process_path(path, output='ali.hdf'):
     phons = apply_parallel(iface.ali2df, phon_args)
     print(mfccs.info())
     print(phons.info())
+    mfccs.to_hdf(output, 'raw')
 
     print("\ncomputing deltas")
     mfccs = compute_deltas(mfccs)
@@ -165,4 +166,5 @@ def compute_utt_feats(df_seg):
     df_utt.columns = ['avg_'+c for c in cols] + ['var_'+c for c in cols]
 
     return df_utt
+
 
