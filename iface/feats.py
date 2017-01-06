@@ -24,6 +24,7 @@ def roll_delta(args):
     df_dd = delta(df_d)
     return pd.concat((a, df_d, df_dd), axis=1).astype(np.float16)
 
+
 def count_phones(args):
     pg, mg = args
     lpg = len(pg)
@@ -33,13 +34,15 @@ def count_phones(args):
     mg['ord'] = np.array(ali_idx, dtype=np.uint16)
     return mg
 
+
 # parallelize functions applied to dataframe groups
-def apply_parallel(func, args=()):
-    p = Pool(cpu_count())
+def apply_parallel(func, args=(), n_proc=cpu_count()):
+    p = Pool(n_cpu)
     ret = p.map(func, args)
     p.close()
     p.terminate()
     return pd.concat(ret)
+
 
 # computes delta features in place
 def compute_deltas(df_mfcc, n=2):
@@ -57,6 +60,7 @@ def compute_deltas(df_mfcc, n=2):
     df_deltas.columns = c1 + c2 + c3
     return df_deltas
 
+
 # align raw mfcc dataframe to raw phone dataframe
 # return raw mfcc frames with phone segment label
 def align_phones(df_mfcc, df_phon):
@@ -73,11 +77,12 @@ def align_phones(df_mfcc, df_phon):
     mg = df_mfcc.groupby(df_mfcc.index)
     return apply_parallel(count_phones, [(g, mg.get_group(n)) for n, g in pg])
 
+
 # process all alignment files in a given directory
 # MFCC files are assumed to begin with 'mfcc' and phone alignments files with
 # 'phon'. returns dataframe indexed by utterance name containing mfccs,
 # delta/delta2s, and phone order within utterance
-def process_path(path):
+def process_path(path, output='ali.hdf'):
     import iface, os
     import cPickle as pickle
 
@@ -96,18 +101,16 @@ def process_path(path):
     print(phons.info())
 
     print("\ncomputing deltas")
-    try:
-        mfccs = compute_deltas(mfccs)
-        print(mfccs.info())
-    except: pickle.dumps(mfccs, open('mfcc-dump.pk', 'wb'), -1)
-    return phons, mfccs
+    mfccs = compute_deltas(mfccs)
+    print(mfccs.info())
 
     print("\naligning phones")
-    try:
-        mfccs = align_phones(mfccs, phons)
-        print(mfccs.info())
-    except: pickle.dumps(mfccs, open('ali-dump.pk', 'wb'), -1)
-    return mfccs
+    mfccs = align_phones(mfccs, phons)
+    print(mfccs.info())
+
+    mfccs.to_hdf(output, 'ali')
+    phons.to_hdf(output, 'phon')
+
 
 # compute segment-level features for utterance classification from a phone
 # aligned mfcc dataframe. features include per segment frame averages, variances
@@ -115,17 +118,21 @@ def process_path(path):
 def compute_utt_feats(df_ali):
     dfg_ali = df_ali.groupby([df_ali.index, df_ali['ord']])
 
+    print("computing segment durations and delta segment durations")
     dur = pd.Series(dfg_ali.eng.count(), name='dur', dtype=np.int16)
     ddur = dur.groupby(dur.index.get_level_values(0)).diff()
     dddur = ddur.groupby(ddur.index.get_level_values(0)).diff()
     ddur.fillna(0, inplace=True)
     dddur.fillna(0, inplace=True)
 
+    print("computing per segment MFCC means")
     means = dfg_ali.mean()
 
+    print("computing delta segment MFCC means")
     dmeans = means.groupby(means.index.get_level_values(0)).diff()
     dmeans.fillna(0, inplace=True)
 
+    print("computing delta delta segment MFCC means")
     ddmeans = dmeans.groupby(dmeans.index.get_level_values(0)).diff()
     ddmeans.fillna(0, inplace=True)
 
@@ -137,8 +144,11 @@ def compute_utt_feats(df_ali):
 
     feats = pd.concat((dur, means, ddur.astype(np.int16), dmeans, dddur.astype(np.int16), ddmeans), axis=1)
 
-    dfg_feat = feats.groupby(feats.index.get_levels_values(0))
+    print("computing per utterance means and variances")
+    dfg_feat = feats.groupby(feats.index.get_level_values(0))
     utts = pd.concat((dfg_feat.mean(), dfg_feat.var()), axis=1)
+    cols = feats.columns
+    utts.columns = ['avg_'+c for c in cols] + ['var_'+c for c in cols]
 
     return utts
 
