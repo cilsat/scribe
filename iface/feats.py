@@ -26,8 +26,10 @@ def roll_delta(dfg, n=2):
     w = np.arange(-n, n+1)
     d = 1./np.sum([2*i*i for i in range(1, n+1)])
 
+    # uses segment_axis to efficiently generate an overlapping window view of
+    # the data and apply the weighting/summing delta function
     delta = lambda nd: np.sum(sa(np.concatenate(([nd[0] for _ in range(n)], nd,
-            [nd[-1] for _ in range(n)])), n*2+1, n*2, 0).swapaxes(1,2) * w, axis=-1)*d
+        [nd[-1] for _ in range(n)])), n*2+1, n*2, 0).swapaxes(1,2) * w, axis=-1)*d
 
     nd_d = delta(dfg.values)
     nd_dd = delta(nd_d)
@@ -36,7 +38,7 @@ def roll_delta(dfg, n=2):
         pd.DataFrame(nd_d, index=dfg.index, dtype=np.float16),
         pd.DataFrame(nd_dd, index=dfg.index, dtype=np.float16)), axis=1)
 
-# computes delta features in place
+# computes delta features in parallel
 def compute_deltas(df_mfcc, n=2):
     # group features by utterance and compute deltas/delta-deltas
     mg = df_mfcc.groupby(df_mfcc.index)
