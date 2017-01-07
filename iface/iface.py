@@ -2,7 +2,7 @@
 
 import numpy as np
 import pandas as pd
-import multiprocessing as mp
+from utils import apply_parallel
 
 # read kaldi phone alignment file and return a dataframe indexed by utt/file
 # location and duration are in milliseconds and encoded to unsigned integer
@@ -29,3 +29,12 @@ def df2hdf(df, df_name, hdf_file):
 # read all groups in an HDF file to a dataframe
 def hdf2df(hdf_file, df_name):
     return pd.read_hdf(hdf_file, df_name)
+
+def parse_files(mfcc_files=[], phon_files=[]):
+    mfcc_args = [(f, 'mfcc') for f in mfcc_files]
+    phon_args = [(f, 'phon') for f in phon_files]
+
+    mfcc = apply_parallel(ali2df, mfcc_args)
+    phon = apply_parallel(ali2df, phon_args)
+
+    return mfcc, phon

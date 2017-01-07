@@ -5,18 +5,10 @@
 
 import pandas as pd
 import numpy as np
-import segmentaxis
-from multiprocessing import Pool, cpu_count
-from itertools import zip_longest
-from segmentaxis import segment_axis as sa
+from itertools import repeat
 
-# parallelize functions applied to dataframe groups
-# it should be noted that this is *very inefficient* for multi-indexed groups
-# i.e. dataframes grouped on more than one axis due to pickling
-def apply_parallel(func, args):
-    with Pool(cpu_count()) as p:
-        ret = p.starmap(func, args)
-    return pd.concat(ret)
+from segmentaxis import segment_axis as sa
+from utils import apply_parallel
 
 
 # calculate delta and delta-delta features in an utterance dataframe
@@ -34,7 +26,8 @@ def roll_delta(dfg, n=2):
     nd_d = delta(dfg.values)
     nd_dd = delta(nd_d)
 
-    return pd.concat((pd.DataFrame(nd_d, index=dfg.index, dtype=np.float16),
+    return pd.concat((dfg,
+        pd.DataFrame(nd_d, index=dfg.index, dtype=np.float16),
         pd.DataFrame(nd_dd, index=dfg.index, dtype=np.float16)), axis=1)
 
 # computes delta features in parallel
@@ -44,26 +37,43 @@ def compute_deltas(df_mfcc, n=2):
     df_deltas = apply_parallel(roll_delta, [(g, n) for _, g in mg])
 
     # fix column names
+    c_ = [c for c in df_mfcc.columns]
     c_d = ['d_' + c for c in df_mfcc.columns]
     c_dd = ['dd_' + c for c in df_mfcc.columns]
-    df_deltas.columns = c_d + c_dd
+    df_deltas.columns = c_ + c_d + c_dd
     return df_deltas
 
 
-# align MFCC frames in one dataframe to phone segments in another dataframe
+# aligns MFCC frames in one dataframe to phone segments in another dataframe
 # creates a new column in the MFCC dataframe indicating phone count, i.e. the
 # phone order of a particular frame within an utterance
+# TODO the MFCC data doesn't actually need to be passed to this function
+# NOTE actually it does because otherwise you'll need to concat it afterwards
 def count_phones(mg, pg):
     lpg = len(pg)
     lmg = len(mg)
-    ali_idx = [x for n in [[i]*pg.dur[i] for i in range(lpg - 1)] for x in n]
-    ali_idx.extend([ali_idx[-1] + 1 for _ in range(lmg - len(ali_idx))])
-    mg['ord'] = np.array(ali_idx, dtype=np.uint16)
-    return mg
+    ali_idx = np.array([(i, r) for i in range(lpg) for r in repeat(pg.phon.iloc[i], pg.dur.iloc[i])], dtype=np.uint16)
+    dif = lmg - ali_idx.shape[0]
+    if dif > 0:
+        ali_idx = np.concatenate((ali_idx, [ali_idx[-1] for _ in range(dif)]))
+    return mg.assign(ord=ali_idx[:,0], phon=ali_idx[:,1])
+
+def count_phones_per_spkr(dfg_mfcc, dfg_phon):
+    spk_frames = []
+    for utt, frames in dfg_mfcc.groupby(dfg_mfcc.index):
+        seg = dfg_phon.loc[utt]
+        idx = [(i, r) for i in range(len(seg)) for r in repeat(seg.phon.iloc[i], seg.dur.iloc[i])]
+        dif = len(frames) - len(idx)
+        if dif > 0:
+            idx.extend([idx[-1] for _ in range(dif)])
+        spk_frames.extend(idx)
+    spk_frames = np.array(spk_frames, dtype=np.uint16)
+    return dfg_mfcc.assign(ord=spk_frames[:,0], phon=spk_frames[:,1])
 
 
-# align raw mfcc dataframe to raw phone dataframe
-# return raw mfcc frames with phone segment label
+# align MFCC dataframe to phone dataframe.
+# returns frame-level alignments for phone segment number (within utterance),
+# phone symbol, and speaker.
 def align_phones(df_mfcc, df_phon):
     # use the minimal subset of utt/files contained in both dataframes
     # drop utterances with only 1 phone
@@ -73,104 +83,61 @@ def align_phones(df_mfcc, df_phon):
     df_mfcc.drop(drop, inplace=True)
     df_phon.drop(drop, inplace=True)
 
+    """
     # construct indices of frames from phone alignments
     pg = df_phon.groupby(df_phon.index)
     mg = df_mfcc.groupby(df_mfcc.index)
+    # MFCC groups must be manually matched by name as the parallel parsing
+    # method means there is no guarantee that MFCC and phones are file aligned
     return apply_parallel(count_phones, [(mg.get_group(n), g) for n, g in pg])
+    """
+    # speaker information should be encoded somehow in the utterance filename
+    # the grouper is the pattern needed to extract this information
+    dfg_spk_mfcc = df_mfcc.groupby(df_mfcc.index.str[:9])
+    dfg_spk_phon = df_phon.groupby(df_phon.index.str[:9])
+
+    args = [(g, dfg_spk_phon.get_group(n)) for n, g in dfg_spk_mfcc]
+    ali = apply_parallel(count_phones_per_spkr, args)
+    return ali
 
 
-# process all alignment files in a given directory
-# MFCC files are assumed to begin with 'mfcc' and phone alignments files with
-# 'phon'. returns dataframe indexed by utterance name containing mfccs,
-# delta/delta2s, and phone order within utterance
-def process_path(path, output='ali.hdf'):
-    import iface, os
-    outpath = os.path.join(path, output)
+def calc_segs(spk):
+    dfg = spk.groupby([spk.index, spk.ord])
 
-    print("parsing files")
-    mfcc_args = []
-    phon_args = []
-    for f in os.listdir(path):
-        if f.startswith('mfcc'):
-            mfcc_args.append((os.path.join(path, f), 'mfcc'))
-        elif f.startswith('phon'):
-            phon_args.append((os.path.join(path, f), 'phon'))
+    dur = pd.Series(dfg.eng.count(), name='dur', dtype=np.int16)
+    d_dur = dur.groupby(dur.index.get_level_values(0)).diff()
+    dd_dur = d_dur.groupby(d_dur.index.get_level_values(0)).diff()
+    d_dur.fillna(0, inplace=True)
+    dd_dur.fillna(0, inplace=True)
+    d_dur.name = 'd_dur'
+    dd_dur.name = 'dd_dur'
 
-    mfcc = apply_parallel(iface.ali2df, mfcc_args)
-    phon = apply_parallel(iface.ali2df, phon_args)
-    print(mfcc.info())
-    print(phon.info())
+    mean = dfg.mean()
+    d_mean = mean.groupby(mean.index.get_level_values(0)).diff()
+    d_mean.fillna(0, inplace=True)
+    dd_mean = d_mean.groupby(d_mean.index.get_level_values(0)).diff()
+    dd_mean.fillna(0, inplace=True)
 
-    print("\nwriting raw MFCCs and phone alignments to hdf")
-    mfcc.to_hdf(outpath, 'mfcc')
-    phon.to_hdf(outpath, 'phon')
+    mean.columns = ['avg_' + c for c in mean.columns]
+    d_mean.columns = ['d_' + c for c in d_mean.columns]
+    dd_mean.columns = ['dd_' + c for c in dd_mean.columns]
 
-    print("\ncomputing deltas")
-    delta = compute_deltas(mfcc)
-    print(delta.info())
-
-    print("\nwriting deltas to hdf")
-    delta.to_hdf(outpath, 'delta')
-
-    print("\naligning phones")
-    ali = align_phones(pd.concat((mfcc, delta), axis=1), phon)
-    del mfcc, delta, phon
-    print(ali.info())
-
-    print("\nwriting dataframe to hdf file")
-    ali.to_hdf(outpath, 'ali')
+    return pd.concat((dur, mean, d_dur.astype(np.int16), d_mean, dd_dur.astype(np.int16), dd_mean), axis=1)
 
 
 # compute segment-level features for utterance classification from a phone
 # aligned mfcc dataframe. features include per segment frame averages, variances
 # and their deltas.
 def compute_seg_feats(df_ali):
-
-    def calc_durs(dfg):
-        dur = pd.Series(dfg.eng.count(), name='dur', dtype=np.int16)
-        d_dur = dur.groupby(dur.index.get_level_values(0)).diff()
-        dd_dur = d_dur.groupby(d_dur.index.get_level_values(0)).diff()
-        d_dur.fillna(0, inplace=True)
-        dd_dur.fillna(0, inplace=True)
-        d_dur.name = 'd_dur'
-        dd_dur.name = 'dd_dur'
-        return pd.concat((dur, d_dur, dd_dur), axis=1).astype(np.int16)
-
-    def calc_means(dfg):
-        print("computing per segment MFCC means")
-        mean = dfg.mean()
-
-        print("computing delta segment MFCC means")
-        d_mean = mean.groupby(mean.index.get_level_values(0)).diff()
-        d_mean.fillna(0, inplace=True)
-
-        print("computing delta delta segment MFCC means")
-        dd_mean = d_mean.groupby(d_mean.index.get_level_values(0)).diff()
-        dd_mean.fillna(0, inplace=True)
-
-        mean.columns = ['avg_' + c for c in mean.columns]
-        d_mean.columns = ['d_' + c for c in d_mean.columns]
-        dd_mean.columns = ['dd_' + c for c in dd_mean.columns]
-        return pd.concat((mean, d_mean, dd_mean), axis=1)
-
-    dfg_ali = df_ali.groupby([df_ali.index, df_ali['ord']])
-
-    print("computing segment durations and delta segment durations")
-    durs = calc_durs(dfg_ali)
-    print("computing segment means and delta segment durations")
-    means = calc_means(dfg_ali)
-
-    df_seg = pd.concat((durs, means), axis=1)
-    return df_seg
+    return apply_parallel(calc_segs, [[g] for _, g in df_ali.groupby(df_ali.index.str[:9])])
 
 
 def compute_utt_feats(df_seg):
-    print("computing per utterance means and variances")
+    df_seg = df_seg.drop(df_seg.columns[df_seg.columns.str.contains('phon')], axis=1)
     dfg_feat = df_seg.groupby(df_seg.index.get_level_values(0))
     df_utt = pd.concat((dfg_feat.mean().astype(np.float16), dfg_feat.var().astype(np.float16)), axis=1)
     cols = df_seg.columns
     df_utt.columns = ['avg_'+c for c in cols] + ['var_'+c for c in cols]
 
     return df_utt
-
 
