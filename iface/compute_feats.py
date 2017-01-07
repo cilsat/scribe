@@ -5,6 +5,7 @@ from iface import parse_files
 import feats
 
 import os
+import time
 from argparse import ArgumentParser
 
 # process all alignment files in a given directory
@@ -14,45 +15,48 @@ from argparse import ArgumentParser
 def process_path(path, output='feats.hdf'):
     outpath = os.path.join(path, output)
 
-    print("parsing files")
+    start = time.time()
+    print("\nParsing files")
     mfiles = [os.path.join(path, f) for f in os.listdir(path) if f.startswith('mfcc')]
     pfiles = [os.path.join(path, f) for f in os.listdir(path) if f.startswith('phon')]
     mfcc, phon = parse_files(mfiles, pfiles)
     print(mfcc.info())
     print(phon.info())
-    print("\nwriting MFCC frames and phone alignments to hdf")
+    print("\nWriting MFCC frames and phone alignments to hdf")
     mfcc.to_hdf(outpath, 'mfcc')
     phon.to_hdf(outpath, 'phon')
 
-    print("\ncomputing deltas")
+    print("\nComputing deltas")
     delta = feats.compute_deltas(mfcc)
     del mfcc
     print(delta.info())
-    print("\nwriting full MFCCs to hdf")
+    print("\nWriting full MFCCs to hdf")
     delta.to_hdf(outpath, 'delta')
 
-    print("\naligning MFCC frames to phones")
+    print("\nAligning MFCC frames to phones")
     ali = feats.align_phones(delta, phon)
     del delta, phon
     print(ali.info())
-    print("\n writing aligned frames to hdf")
+    print("\nWriting aligned frames to hdf")
     ali.to_hdf(outpath, 'ali')
 
-    print("\ncomputing segment level features")
+    print("\nComputing segment level features")
     seg = feats.compute_seg_feats(ali)
     print(seg.info())
-    print("\nwriting segment features to hdf")
+    print("\nWriting segment features to hdf")
     seg.to_hdf(outpath, 'seg')
     del ali
 
-    print("\ncomputing utterance level features")
+    print("\nComputing utterance level features")
     utt = feats.compute_utt_feats(seg)
     print(utt.info())
-    print("\nwriting utterance features to hdf")
+    print("\nWriting utterance features to hdf")
     utt.to_hdf(outpath, 'utt')
     del seg
 
-    print("\nfinished processing " + output)
+    end = time.time()
+
+    print("\nFinished processing " + output + " in " + str(end-start))
 
 
 if __name__ == "__main__":
