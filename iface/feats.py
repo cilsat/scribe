@@ -114,8 +114,8 @@ def calc_segs(spk):
     dd_mean = dd_mean.fillna(0).astype(np.float16)
 
     mean.columns = ['avg_' + c for c in mean.columns]
-    d_mean.columns = ['d_avg' + c for c in d_mean.columns]
-    dd_mean.columns = ['dd_avg' + c for c in dd_mean.columns]
+    d_mean.columns = ['d_avg_' + c for c in d_mean.columns]
+    dd_mean.columns = ['dd_avg_' + c for c in dd_mean.columns]
 
     return pd.concat((phon, dur, mean, d_dur, d_mean, dd_dur, dd_mean), axis=1)
 
@@ -127,11 +127,23 @@ def compute_seg_feats(df_ali):
 
 
 def compute_utt_feats(df_seg):
+    """
     df_seg = df_seg.drop(df_seg.columns[df_seg.columns.str.contains('phon')], axis=1)
     dfg_feat = df_seg.groupby(df_seg.index.get_level_values(0))
     df_utt = pd.concat((dfg_feat.mean().astype(np.float16), dfg_feat.var().astype(np.float16)), axis=1)
     cols = df_seg.columns
     df_utt.columns = ['avg_'+c for c in cols] + ['var_'+c for c in cols]
+    """
+    # drop silence segments at the beginning and end of utterances
+    df = df_seg.drop(df_seg.loc[df_seg.phon == 1].index)
+    # drop phone column
+    df = df.drop('phon', axis=1)
+    # group by utterance
+    dfg_utt = df.groupby(df.index.get_level_values(0))
+    # compute normalized means
+    df_utt = dfg_utt.mean()/dfg_utt.std()
+    # drop utterances with NaN or Inf
+    df_utt = df_utt[np.all(np.isfinite(df_utt), axis=1)]
 
     return df_utt
 
