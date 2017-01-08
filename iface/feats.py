@@ -44,11 +44,6 @@ def compute_deltas(df_mfcc, n=2):
     return df_deltas
 
 
-# aligns MFCC frames in one dataframe to phone segments in another dataframe
-# creates a new column in the MFCC dataframe indicating phone count, i.e. the
-# phone order of a particular frame within an utterance
-# TODO the MFCC data doesn't actually need to be passed to this function
-# NOTE actually it does because otherwise you'll need to concat it afterwards
 def count_phones(mg, pg):
     lpg = len(pg)
     lmg = len(mg)
@@ -58,6 +53,12 @@ def count_phones(mg, pg):
         ali_idx = np.concatenate((ali_idx, [ali_idx[-1] for _ in range(dif)]))
     return mg.assign(ord=ali_idx[:,0], phon=ali_idx[:,1])
 
+
+# aligns MFCC frames in one dataframe to phone segments in another dataframe
+# creates a new column in the MFCC dataframe indicating phone count, i.e. the
+# phone order of a particular frame within an utterance
+# TODO the MFCC data doesn't actually need to be passed to this function
+# NOTE actually it does because otherwise you'll need to concat it afterwards
 def count_phones_per_spkr(dfg_mfcc, dfg_phon):
     spk_frames = []
     for utt, frames in dfg_mfcc.groupby(dfg_mfcc.index):
@@ -69,7 +70,6 @@ def count_phones_per_spkr(dfg_mfcc, dfg_phon):
         spk_frames.extend(idx)
     spk_frames = np.array(spk_frames, dtype=np.uint16)
     return dfg_mfcc.assign(ord=spk_frames[:,0], phon=spk_frames[:,1])
-
 
 # align MFCC dataframe to phone dataframe.
 # returns frame-level alignments for phone segment number (within utterance),
@@ -83,14 +83,6 @@ def align_phones(df_mfcc, df_phon):
     df_mfcc.drop(drop, inplace=True)
     df_phon.drop(drop, inplace=True)
 
-    """
-    # construct indices of frames from phone alignments
-    pg = df_phon.groupby(df_phon.index)
-    mg = df_mfcc.groupby(df_mfcc.index)
-    # MFCC groups must be manually matched by name as the parallel parsing
-    # method means there is no guarantee that MFCC and phones are file aligned
-    return apply_parallel(count_phones, [(mg.get_group(n), g) for n, g in pg])
-    """
     # speaker information should be encoded somehow in the utterance filename
     # the grouper is the pattern needed to extract this information
     dfg_spk_mfcc = df_mfcc.groupby(df_mfcc.index.str[:9])
@@ -123,7 +115,6 @@ def calc_segs(spk):
     dd_mean.columns = ['dd_' + c for c in dd_mean.columns]
 
     return pd.concat((dur, mean, d_dur.astype(np.int16), d_mean, dd_dur.astype(np.int16), dd_mean), axis=1)
-
 
 # compute segment-level features for utterance classification from a phone
 # aligned mfcc dataframe. features include per segment frame averages, variances
