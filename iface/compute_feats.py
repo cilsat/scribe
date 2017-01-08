@@ -22,7 +22,7 @@ def process_path(path, output='feats.hdf'):
     mfcc, phon = parse_files(mfiles, pfiles)
     print(mfcc.info())
     print(phon.info())
-    print("\nWriting MFCC frames and phone alignments to hdf")
+    #print("\nWriting MFCC frames and phone alignments to hdf")
     #mfcc.to_hdf(outpath, 'mfcc')
     #phon.to_hdf(outpath, 'phon')
 
