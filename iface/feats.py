@@ -114,8 +114,8 @@ def calc_segs(spk):
     dd_mean = dd_mean.fillna(0).astype(np.float16)
 
     mean.columns = ['avg_' + c for c in mean.columns]
-    d_mean.columns = ['d_' + c for c in d_mean.columns]
-    dd_mean.columns = ['dd_' + c for c in dd_mean.columns]
+    d_mean.columns = ['d_avg' + c for c in d_mean.columns]
+    dd_mean.columns = ['dd_avg' + c for c in dd_mean.columns]
 
     return pd.concat((phon, dur, mean, d_dur, d_mean, dd_dur, dd_mean), axis=1)
 
