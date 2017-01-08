@@ -98,24 +98,26 @@ def calc_segs(spk):
     dfg = spk.groupby([spk.index, spk.ord])
 
     dur = pd.Series(dfg.eng.count(), name='dur', dtype=np.int16)
-    d_dur = dur.groupby(dur.index.get_level_values(0)).diff().abs()
-    dd_dur = d_dur.groupby(d_dur.index.get_level_values(0)).diff().abs()
-    d_dur.fillna(0, inplace=True)
-    dd_dur.fillna(0, inplace=True)
+    d_dur = dur.groupby(dur.index.get_level_values(0)).diff()
+    dd_dur = d_dur.groupby(d_dur.index.get_level_values(0)).diff()
+    d_dur = d_dur.fillna(0).astype(np.int16)
+    dd_dur = dd_dur.fillna(0).astype(np.int16)
     d_dur.name = 'd_dur'
     dd_dur.name = 'dd_dur'
 
     mean = dfg.mean()
+    phon = mean.phon
+    mean.drop('phon', axis=1, inplace=True)
     d_mean = mean.groupby(mean.index.get_level_values(0)).diff()
-    d_mean.fillna(0, inplace=True)
     dd_mean = d_mean.groupby(d_mean.index.get_level_values(0)).diff()
-    dd_mean.fillna(0, inplace=True)
+    d_mean = d_mean.fillna(0).astype(np.float16)
+    dd_mean = dd_mean.fillna(0).astype(np.float16)
 
     mean.columns = ['avg_' + c for c in mean.columns]
     d_mean.columns = ['d_' + c for c in d_mean.columns]
     dd_mean.columns = ['dd_' + c for c in dd_mean.columns]
 
-    return pd.concat((dur, mean, d_dur.astype(np.int16), d_mean, dd_dur.astype(np.int16), dd_mean), axis=1)
+    return pd.concat((phon, dur, mean, d_dur, d_mean, dd_dur, dd_mean), axis=1)
 
 # compute segment-level features for utterance classification from a phone
 # aligned mfcc dataframe. features include per segment frame averages, variances
