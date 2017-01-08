@@ -1,4 +1,4 @@
-#!/usr/bin/python2
+#!/usr/bin/python3
 
 # methods for feature computation and alignment at the frame, segment, and
 # utterance levels.
@@ -85,6 +85,7 @@ def align_phones(df_mfcc, df_phon):
 
     # speaker information should be encoded somehow in the utterance filename
     # the grouper is the pattern needed to extract this information
+    # in this case, the speaker can be identified by the first 9 chars in file
     dfg_spk_mfcc = df_mfcc.groupby(df_mfcc.index.str[:9])
     dfg_spk_phon = df_phon.groupby(df_phon.index.str[:9])
 
@@ -97,8 +98,8 @@ def calc_segs(spk):
     dfg = spk.groupby([spk.index, spk.ord])
 
     dur = pd.Series(dfg.eng.count(), name='dur', dtype=np.int16)
-    d_dur = dur.groupby(dur.index.get_level_values(0)).diff()
-    dd_dur = d_dur.groupby(d_dur.index.get_level_values(0)).diff()
+    d_dur = dur.groupby(dur.index.get_level_values(0)).diff().abs()
+    dd_dur = d_dur.groupby(d_dur.index.get_level_values(0)).diff().abs()
     d_dur.fillna(0, inplace=True)
     dd_dur.fillna(0, inplace=True)
     d_dur.name = 'd_dur'

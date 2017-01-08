@@ -23,15 +23,15 @@ def process_path(path, output='feats.hdf'):
     print(mfcc.info())
     print(phon.info())
     print("\nWriting MFCC frames and phone alignments to hdf")
-    mfcc.to_hdf(outpath, 'mfcc')
-    phon.to_hdf(outpath, 'phon')
+    #mfcc.to_hdf(outpath, 'mfcc')
+    #phon.to_hdf(outpath, 'phon')
 
     print("\nComputing deltas")
     delta = feats.compute_deltas(mfcc)
     del mfcc
     print(delta.info())
-    print("\nWriting full MFCCs to hdf")
-    delta.to_hdf(outpath, 'delta')
+    #print("\nWriting full MFCCs to hdf")
+    #delta.to_hdf(outpath, 'delta')
 
     print("\nAligning MFCC frames to phones")
     ali = feats.align_phones(delta, phon)
