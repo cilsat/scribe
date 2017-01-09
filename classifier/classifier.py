@@ -24,3 +24,8 @@ def train(clf, df_spon, df_read, sample=True):
         lbl = [True]*len(df_spon) + [False]*len(df_read)
 
     clf.fit(data, lbl)
+    try:
+        weights = pd.Series(clf.feature_importances_, index=df_spon.columns).sort_values()
+    except:
+        pass
+

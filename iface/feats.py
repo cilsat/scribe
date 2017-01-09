@@ -74,7 +74,7 @@ def count_phones_per_spkr(dfg_mfcc, dfg_phon):
 # align MFCC dataframe to phone dataframe.
 # returns frame-level alignments for phone segment number (within utterance),
 # phone symbol, and speaker.
-def align_phones(df_mfcc, df_phon):
+def align_phones(df_mfcc, df_phon, spk_group=()):
     # use the minimal subset of utt/files contained in both dataframes
     # drop utterances with only 1 phone
     dif = set(df_mfcc.index) ^ set(df_phon.index)
@@ -86,10 +86,16 @@ def align_phones(df_mfcc, df_phon):
     # speaker information should be encoded somehow in the utterance filename
     # the grouper is the pattern needed to extract this information
     # in this case, the speaker can be identified by the first 9 chars in file
-    dfg_spk_mfcc = df_mfcc.groupby(df_mfcc.index.str[:9])
-    dfg_spk_phon = df_phon.groupby(df_phon.index.str[:9])
+    if spk_group:
+        start, end = spk_group
+        dfg_spk_mfcc = df_mfcc.groupby(df_mfcc.index.str[start:end])
+        dfg_spk_phon = df_phon.groupby(df_phon.index.str[start:end])
+        args = [(g, dfg_spk_phon.get_group(n)) for n, g in dfg_spk_mfcc]
+    else:
+        dfg_mfcc = df_mfcc.groupby(df_mfcc.index)
+        dfg_phon = df_phon.groupby(df_phon.index)
+        args = [(g, dfg_phon.get_group(n)) for n, g in dfg_mfcc]
 
-    args = [(g, dfg_spk_phon.get_group(n)) for n, g in dfg_spk_mfcc]
     ali = apply_parallel(count_phones_per_spkr, args)
     return ali
 
@@ -122,8 +128,14 @@ def calc_segs(spk):
 # compute segment-level features for utterance classification from a phone
 # aligned mfcc dataframe. features include per segment frame averages, variances
 # and their deltas.
-def compute_seg_feats(df_ali):
-    return apply_parallel(calc_segs, [[g] for _, g in df_ali.groupby(df_ali.index.str[:9])])
+def compute_seg_feats(df_ali, spk_group=()):
+    if spk_group:
+        start, end = spk_group
+        args = [[g] for _, g in df_ali.groupby(df_ali.index.str[start:end]]
+    else:
+        arts = [[g] for _, g in df_ali.groupby(df_ali.index)]
+
+    return apply_parallel(calc_segs, args)
 
 
 def compute_utt_feats(df_seg):
