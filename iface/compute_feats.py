@@ -25,6 +25,9 @@ def process_path(path, output='feats.hdf'):
     #print("\nWriting MFCC frames and phone alignments to hdf")
     #mfcc.to_hdf(outpath, 'mfcc')
     #phon.to_hdf(outpath, 'phon')
+    # folds are divided by speaker
+    folds = phon.groupby(phon.index).fold.mean()
+    phon.drop('fold', axis=1, inplace=True)
 
     print("\nComputing deltas")
     delta = feats.compute_deltas(mfcc)
@@ -48,11 +51,11 @@ def process_path(path, output='feats.hdf'):
     del ali
 
     print("\nComputing utterance level features")
-    utt = feats.compute_utt_feats(seg)
+    utt = pd.concat((feats.compute_utt_feats(seg), folds), axis=1)
     print(utt.info())
     print("\nWriting utterance features to hdf")
     utt.to_hdf(outpath, 'utt')
-    del seg
+    del seg, utt
 
     end = time.time()
 

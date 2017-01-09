@@ -44,16 +44,6 @@ def compute_deltas(df_mfcc, n=2):
     return df_deltas
 
 
-def count_phones(mg, pg):
-    lpg = len(pg)
-    lmg = len(mg)
-    ali_idx = np.array([(i, r) for i in range(lpg) for r in repeat(pg.phon.iloc[i], pg.dur.iloc[i])], dtype=np.uint16)
-    dif = lmg - ali_idx.shape[0]
-    if dif > 0:
-        ali_idx = np.concatenate((ali_idx, [ali_idx[-1] for _ in range(dif)]))
-    return mg.assign(ord=ali_idx[:,0], phon=ali_idx[:,1])
-
-
 # aligns MFCC frames in one dataframe to phone segments in another dataframe
 # creates a new column in the MFCC dataframe indicating phone count, i.e. the
 # phone order of a particular frame within an utterance
