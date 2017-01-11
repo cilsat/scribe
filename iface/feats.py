@@ -118,10 +118,10 @@ def calc_segs(spk):
 # compute segment-level features for utterance classification from a phone
 # aligned mfcc dataframe. features include per segment frame averages, variances
 # and their deltas.
-def compute_seg_feats(df_ali, spk_group=()):
+def compute_seg_feats(df_ali, spk_group=(0, 9)):
     if spk_group:
         start, end = spk_group
-        args = [[g] for _, g in df_ali.groupby(df_ali.index.str[start:end]]
+        args = [[g] for _, g in df_ali.groupby(df_ali.index.str[start:end])]
     else:
         arts = [[g] for _, g in df_ali.groupby(df_ali.index)]
 

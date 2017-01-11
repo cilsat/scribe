@@ -4,6 +4,7 @@
 from iface import parse_files
 import feats
 
+import pandas as pd
 import os
 import time
 from argparse import ArgumentParser
@@ -27,6 +28,8 @@ def process_path(path, output='feats.hdf'):
     #phon.to_hdf(outpath, 'phon')
     # folds are divided by speaker
     folds = phon.groupby(phon.index).fold.mean()
+    print("\nWriting utterance folds to hdf")
+    folds.to_hdf(output, 'fold')
     phon.drop('fold', axis=1, inplace=True)
 
     print("\nComputing deltas")
