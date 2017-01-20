@@ -20,7 +20,8 @@ do
   for i in `ls $mfcc_path/$n/data/*mfcc*ark`
   do
     set=${i%.ark}
-    copy-feats ark:$i ark,t:$set.mfc
+    add-deltas ark:$i ark:- | \
+    copy-feats ark:- ark,t:$set.mfc
   done && \
   cat $mfcc_path/$n/data/*.mfc > $out_path/mfcc-$n.ali &
 done
