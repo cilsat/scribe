@@ -1,8 +1,9 @@
 #!/usr/bin/python3
 
+from .utils import apply_parallel
+
 import numpy as np
 import pandas as pd
-from utils import apply_parallel
 from itertools import repeat
 
 # read kaldi phone alignment file and return a dataframe indexed by utt/file

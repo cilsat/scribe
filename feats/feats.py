@@ -7,8 +7,8 @@ import pandas as pd
 import numpy as np
 from itertools import repeat
 
-from segmentaxis import segment_axis as sa
-from utils import apply_parallel
+from .segmentaxis import segment_axis as sa
+from ..utils.utils import apply_parallel
 
 
 # calculate delta and delta-delta features in an utterance dataframe

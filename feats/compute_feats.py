@@ -1,13 +1,13 @@
 #!/usr/bin/python3
 # Requires multiprocessing with starmap (only available in python 3) and Pandas
 
-from iface import parse_files
-import feats
-
 import pandas as pd
 import os
 import time
 from argparse import ArgumentParser
+
+from ..utils.iface import parse_files
+import .feats
 
 # process all alignment files in a given directory
 # MFCC files are assumed to begin with 'mfcc' and phone alignments files with
