@@ -64,7 +64,7 @@ def count_phones_per_spkr(dfg_mfcc, dfg_phon):
 # align MFCC dataframe to phone dataframe.
 # returns frame-level alignments for phone segment number (within utterance),
 # phone symbol, and speaker.
-def align_phones(df_mfcc, df_phon, spk_group=()):
+def align_phones(df_mfcc, df_phon, spk_group=(), seq=False):
     # use the minimal subset of utt/files contained in both dataframes
     # drop utterances with only 1 phone
     dif = set(df_mfcc.index) ^ set(df_phon.index)
@@ -86,7 +86,10 @@ def align_phones(df_mfcc, df_phon, spk_group=()):
         dfg_phon = df_phon.groupby(df_phon.index)
         args = [(g, dfg_phon.get_group(n)) for n, g in dfg_mfcc]
 
-    ali = apply_parallel(count_phones_per_spkr, args)
+    if seq:
+        ali = pd.concat([count_phones_per_spkr(m, p) for m, p in args])
+    else:
+        ali = apply_parallel(count_phones_per_spkr, args)
     return ali
 
 
