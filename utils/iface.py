@@ -32,6 +32,12 @@ def ali2df(ali_file, raw='phon', fold=None):
         df.index = [n for r in raw for n in [r[0].split('[')[0].strip()]*(len(r) - 1)]
         df.columns = ['c'+str(n) for n in range(39)]
 
+    else:
+        with open(ali_file) as f: raw = f.read().split(']')[:-1]
+        raw[:] = [r.strip().splitlines() for r in raw]
+        df = pd.DataFrame([fr.strip().split() for r in raw for fr in r[1:]], dtype=np.float16)
+        df.index = [n for r in raw for n in [r[0].split('[')[0].strip()]*(len(r) - 1)]
+
     return df
 
 # write dataframe as a group in an HDF file with utt/files as separate datasets

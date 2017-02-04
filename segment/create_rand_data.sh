@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/zsh
 
 # creates random concatenated audio files from speech in a given directory.
 # returns a CSV of the durations and names of the files concatenated.
@@ -11,17 +11,21 @@ model=$3
 out=$4
 
 # randomly choose audio files from root directory
-files=$(find $root -iname "*.wav" | shuf | head -n $num)
-
-# get durations of chosen files and output to CSV file
-for f in $files; do echo `soxi $f | grep 'Duration' | cut -d ' ' -f9`"\t"$root$f; done > $out.csv
+spkr=($(ls $root | shuf | head -n $num))
+files=()
+for s in $spkr
+do
+  f=$(find $root/$s -iname "*.wav" | shuf | head -n 1)
+  files+=($f)
+  fn=$(echo $f | rev | cut -d '/' -f1 | rev)
+  echo "${fn%.wav} $f"
+done > $out.scp
 
 # concatenate chosen audio files and output to WAV
 sox $files $out.wav
 
 # compute raw MFCCs of concatenated audio file and output to MFC file
-echo $out $out.wav | \
-  compute-mfcc-feats scp:- ark:- | \
+compute-mfcc-feats scp:$out.scp ark:- | \
   add-deltas ark:- ark:- | \
   copy-feats ark:- ark,t:$out.mfc
 
