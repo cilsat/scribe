@@ -24,6 +24,43 @@ def calc_glr(df, seg=(0, 0, 0), theta=2.0):
     zm = multivariate_normal.logpdf(z, z.mean(), z.cov())
     return (np.sum(zm) - np.sum(np.hstack((xm, ym))))/len(z)**theta
 
+def is_segment(x, y, threshold=0.3, theta=1):
+    x = x.drop(['ord', 'phon'], axis=1)
+    y = y.drop(['ord', 'phon'], axis=1)
+
+    z = pd.concat((x, y))
+    xm = multivariate_normal.logpdf(x, x.mean(), x.cov())
+    ym = multivariate_normal.logpdf(y, y.mean(), y.cov())
+    zm = multivariate_normal.logpdf(z, z.mean(), z.cov())
+    return (np.sum(zm) - np.sum(np.hstack((xm, ym))))/len(z)**theta < threshold
+
+def segment(ali):
+    dfg = ali.groupby([ali['ord'], ali.index])
+    # get phone segment indices of speaker changes
+    turn = np.concatenate(([False], np.diff(dfg.first().index.get_level_values(1)) > 0))
+    # group by phone segment and speaker segment
+    phones = pd.concat((dfg.phon.first(), dfg.ord.count()), axis=1)
+    phones['turn'] = turn
+    phones.index = phones.index.get_level_values(0)
+
+    dim = len(ali.columns) - 2
+    turn = 0
+    prev = pd.DataFrame()
+    segments = []
+
+    for n, g in ali.groupby(ali['ord']):
+        if len(g) < dim or len(prev) < dim:
+            print(len(g), len(prev), 'cur singular')
+            prev = pd.concat((prev, g))
+        else:
+            if is_segment(prev, g):
+                segments.append(prev)
+                prev = g
+            else:
+                prev = pd.concat((prev, g))
+
+    return segments, turn
+
 def sil_segment(df_ali, theta=2.0):
     """
     main function for detecting speaker changes given a dataframe containing
@@ -56,7 +93,7 @@ def sil_segment(df_ali, theta=2.0):
                 sil_b, sil_i, sil_e = (sil_b, sil_i, n)
     return pd.Series(glrs, index=ords)
 
-def preprocess(name, path='.'):
+def preprocess(name, path='.', int_idx=False):
     phon = ali2df(os.path.join(path, name+'.ctm'), 'phon')
     mfcc = ali2df(os.path.join(path, name+'.mfc'), 'delta')
     fidx = phon.index.unique()
@@ -66,7 +103,10 @@ def preprocess(name, path='.'):
     ali = align_phones(mfcc, phon, seq=True)
     count = ali.groupby([ali.index, ali.ord]).phon.count().values.tolist()
     ali.ord = [l for n in range(len(count)) for l in [n]*count[n]]
+    
+    if not int_idx:
+        rmap = dict(zip(range(len(fidx)), fidx))
+        ali.index = ali.index.map(lambda x: rmap[x])
 
     return ali
-
 
