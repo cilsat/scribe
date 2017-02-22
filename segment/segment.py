@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import os
 from scipy.stats import multivariate_normal
+from numpy.linalg import det
 
 from ..utils.iface import ali2df
 from ..feats.feats import align_phones
@@ -24,42 +25,21 @@ def calc_glr(df, seg=(0, 0, 0), theta=2.0):
     zm = multivariate_normal.logpdf(z, z.mean(), z.cov())
     return (np.sum(zm) - np.sum(np.hstack((xm, ym))))/len(z)**theta
 
-def is_segment(x, y, threshold=0.3, theta=1):
-    x = x.drop(['ord', 'phon'], axis=1)
-    y = y.drop(['ord', 'phon'], axis=1)
+def calc_bic(df, idx, win):
+    x = df.iloc[idx-win:idx].drop(['spkr', 'ord', 'phon'], axis=1)
+    y = df.iloc[idx:idx+win].drop(['spkr', 'ord', 'phon'], axis=1)
+    px = np.log(det(x.cov()))
+    py = np.log(det(y.cov()))
+    pz = np.log(det(pd.concat((x, y)).cov()))
+    return win*pz - 0.5*win*(px + py) 
 
-    z = pd.concat((x, y))
-    xm = multivariate_normal.logpdf(x, x.mean(), x.cov())
-    ym = multivariate_normal.logpdf(y, y.mean(), y.cov())
-    zm = multivariate_normal.logpdf(z, z.mean(), z.cov())
-    return (np.sum(zm) - np.sum(np.hstack((xm, ym))))/len(z)**theta < threshold
+def segment(df_ali, win=150):
+    d = len(df_ali.columns)
+    p = 0.25*d*(d + 3)*np.log(2*win)
 
-def segment(ali):
-    dfg = ali.groupby([ali['ord'], ali.index])
-    # get phone segment indices of speaker changes
-    turn = np.concatenate(([False], np.diff(dfg.first().index.get_level_values(1)) > 0))
-    # group by phone segment and speaker segment
-    phones = pd.concat((dfg.phon.first(), dfg.ord.count()), axis=1)
-    phones['turn'] = turn
-    phones.index = phones.index.get_level_values(0)
+    seg = ali.reset_index().groupby(ali.ord)['index'].first()
 
-    dim = len(ali.columns) - 2
-    turn = 0
-    prev = pd.DataFrame()
-    segments = []
-
-    for n, g in ali.groupby(ali['ord']):
-        if len(g) < dim or len(prev) < dim:
-            print(len(g), len(prev), 'cur singular')
-            prev = pd.concat((prev, g))
-        else:
-            if is_segment(prev, g):
-                segments.append(prev)
-                prev = g
-            else:
-                prev = pd.concat((prev, g))
-
-    return segments, turn
+    bic = np.array([calc_bic(df_ali, n, win) - p for n in seg if n > win and n < len(df_ali) - win])
 
 def sil_segment(df_ali, theta=2.0):
     """
@@ -108,5 +88,7 @@ def preprocess(name, path='.', int_idx=False):
         rmap = dict(zip(range(len(fidx)), fidx))
         ali.index = ali.index.map(lambda x: rmap[x])
 
+    ali['spkr'] = ali.index
+    ali.reset_index(drop=True, inplace=True)
     return ali
 
