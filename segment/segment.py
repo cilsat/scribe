@@ -25,9 +25,17 @@ def calc_glr(df, seg=(0, 0, 0), theta=2.0):
     zm = multivariate_normal.logpdf(z, z.mean(), z.cov())
     return (np.sum(zm) - np.sum(np.hstack((xm, ym))))/len(z)**theta
 
+def calc_aicc(df, idx, win):
+    x = df.iloc[idx-win:idx].drop(['turn', 'ord', 'phon'], axis=1)
+    y = df.iloc[idx:idx+win].drop(['turn', 'ord', 'phon'], axis=1)
+    px = np.log(det(x.cov()))
+    py = np.log(det(y.cov()))
+    pz = np.log(det(pd.concat((x, y)).cov()))
+    return win*pz - 0.5*win*(px + py) 
+
 def calc_bic(df, idx, win):
-    x = df.iloc[idx-win:idx].drop(['spkr', 'ord', 'phon'], axis=1)
-    y = df.iloc[idx:idx+win].drop(['spkr', 'ord', 'phon'], axis=1)
+    x = df.iloc[idx-win:idx].drop(['turn', 'ord', 'phon'], axis=1)
+    y = df.iloc[idx:idx+win].drop(['turn', 'ord', 'phon'], axis=1)
     px = np.log(det(x.cov()))
     py = np.log(det(y.cov()))
     pz = np.log(det(pd.concat((x, y)).cov()))
@@ -37,9 +45,11 @@ def segment(df_ali, win=150):
     d = len(df_ali.columns)
     p = 0.25*d*(d + 3)*np.log(2*win)
 
-    seg = ali.reset_index().groupby(ali.ord)['index'].first()
+    seg = df_ali.reset_index().groupby(df_ali.ord)['index'].first()
+    seg = seg.loc[(seg > win) & (seg < len(df_ali) - win)]
+    bic = np.array([calc_bic(df_ali, n, win) - p for n in seg])
 
-    bic = np.array([calc_bic(df_ali, n, win) - p for n in seg if n > win and n < len(df_ali) - win])
+    return seg.values, bic
 
 def sil_segment(df_ali, theta=2.0):
     """
@@ -88,7 +98,7 @@ def preprocess(name, path='.', int_idx=False):
         rmap = dict(zip(range(len(fidx)), fidx))
         ali.index = ali.index.map(lambda x: rmap[x])
 
-    ali['spkr'] = ali.index
+    ali['turn'] = ali.index
     ali.reset_index(drop=True, inplace=True)
     return ali
 
