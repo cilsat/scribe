@@ -13,13 +13,24 @@ out=$4
 # randomly choose audio files from root directory
 spkr=($(ls $root | shuf | head -n $num))
 files=()
+filenames=()
 for s in $spkr
 do
   f=$(find $root/$s -iname "*.wav" | shuf | head -n 1)
   files+=($f)
   fn=$(echo $f | rev | cut -d '/' -f1 | rev)
+  fn=${fn%.wav}
+  filenames+=($fn)
   echo "${fn%.wav} $f"
 done > $out.scp
+
+# make transcript of files
+echo $filenames
+for f in $filenames
+do
+  tr=$(grep $f $root/../text | cut -d ' ' -f2-)
+  echo $tr
+done > $out.txt
 
 # concatenate chosen audio files and output to WAV
 sox $files $out.wav

@@ -41,15 +41,15 @@ def calc_bic(df, idx, win):
     pz = np.log(det(pd.concat((x, y)).cov()))
     return win*pz - 0.5*win*(px + py) 
 
-def segment(df_ali, win=150):
+def segment(df_ali, win=150, theta=1.0):
     d = len(df_ali.columns)
-    p = 0.25*d*(d + 3)*np.log(2*win)
+    p = 0.25*d*(d + 3)*np.log(2*win)*theta
 
     seg = df_ali.reset_index().groupby(df_ali.ord)['index'].first()
     seg = seg.loc[(seg > win) & (seg < len(df_ali) - win)]
     bic = np.array([calc_bic(df_ali, n, win) - p for n in seg])
 
-    return seg.values, bic
+    return pd.Series(bic, index=seg)
 
 def sil_segment(df_ali, theta=2.0):
     """
