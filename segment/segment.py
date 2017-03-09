@@ -86,6 +86,7 @@ def sil_segment(df_ali, theta=2.0):
 def preprocess(name, path='.', int_idx=False):
     phon = ali2df(os.path.join(path, name+'.ctm'), 'phon')
     mfcc = ali2df(os.path.join(path, name+'.mfc'), 'delta')
+
     fidx = phon.index.unique()
     fmap = dict(zip(fidx, range(len(fidx))))
     phon.index = phon.index.map(lambda x: fmap[x])
