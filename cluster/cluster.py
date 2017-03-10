@@ -21,17 +21,17 @@ def preprocess(name, path, int_idx=True):
     mfcc.index = mfcc.index.map(lambda x: fmap[x])
     ali = align_phones(mfcc, phon, seq=True)
     count = ali.groupby([ali.index, ali.ord]).phon.count().values.tolist()
-    ali.ord = [l for n in range(len(count)) for l in [n]*count[n]]
+    ali.ord = np.array([l for n in range(len(count)) for l in [n]*count[n]], dtype=np.uint16)
+    ali['turn'] = np.array(ali.index, dtype=np.uint16)
 
     if int_idx:
         fsmap = dict([(fmap[f], smap[s]) for f in fidx for s in sidx if f[:9] == s])
-        ali['spkr'] = ali.index.map(lambda x: fsmap[x])
+        ali['spkr'] = ali.index.map(lambda x: fsmap[x]).astype(np.uint16)
     else:
         rmap = dict(zip(range(len(fidx)), fidx))
         ali.index = ali.index.map(lambda x: rmap[x])
-        ali['spkr'] = ali.index.str[:9]
+        ali['spkr'] = ali.index.str[:9].astype(np.uint16)
 
-    ali['turn'] = ali.index
     ali.reset_index(drop=True, inplace=True)
 
     return ali
