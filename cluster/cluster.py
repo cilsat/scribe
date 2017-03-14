@@ -35,3 +35,8 @@ def preprocess(name, path, int_idx=True):
     ali.reset_index(drop=True, inplace=True)
 
     return ali
+
+
+def cluster_seq(ali):
+    for n in ali.turn.unique():
+        t = ali.loc[ali.turn == n].drop(['turn'], axis=1)
