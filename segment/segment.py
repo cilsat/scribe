@@ -51,44 +51,38 @@ def segment(df_ali, win=150, theta=1.0):
 
     return pd.Series(bic, index=seg)
 
-def calc_bic2(x, y, pz, penalty=409.5, theta=1.82):
-    px = np.log(np.linalg.det(x.cov()))
-    py = np.log(np.linalg.det(y.cov()))
-    return pz - len(x)*px - len(y)*py - penalty*theta
-
 def segment3(ali, win_size=500, theta=1.82):
     dim = len(ali.columns) - 3
     pen = 0.25*dim*(dim + 3)*theta
-    segs = ali.reset_index().groupby(ali.ord).first()['index']
-    find_seg = lambda seg, size: segs[segs > segs.loc[seg] + size].index.min()
 
     win_start = 0
     while True:
         end_frame = ali.loc[ali.ord == win_start].index[0] + win_size
         if end_frame > len(ali): break
 
-        win_end = int(ali.loc[end_frame].ord + 1)
-        win = ali.loc[(ali.ord >= win_start) & (ali.ord < win_end)]
-        pz = len(win)*np.log(np.linalg.det(win.drop(['ord','turn','phon'],axis=1).cov()))
+        win_end = int(ali.loc[end_frame].ord)
+        win = ali.loc[(ali.ord >= win_start) & (ali.ord <= win_end)]
+        pz = len(win)*np.log(np.linalg.det(win.drop(
+            ['ord','turn','phon'],axis=1).cov()))
+        penalty = pen*np.log(2*len(win))
 
         bic_start = int(ali.loc[win.index[0] + dim].ord + 1)
         bic_end = int(ali.loc[win.index[-1] - dim].ord)
-
         bics = []
         win_segs = range(bic_start, bic_end)
         for n in win_segs:
             x = ali.loc[(ali.ord >= win_start) & (ali.ord < n)].drop(
                     ['ord', 'turn', 'phon'], axis=1)
-            y = ali.loc[(ali.ord >= n) & (ali.ord < win_end)].drop(
+            y = ali.loc[(ali.ord >= n) & (ali.ord <= win_end)].drop(
                     ['ord', 'turn', 'phon'], axis=1)
-            px = np.log(np.linalg.det(x.cov()))
-            py = np.log(np.linalg.det(y.cov()))
-            bics.append(pz - len(x)*px - len(y)*py - pen*np.log(2*len(win)))
+            px = len(x)*np.log(np.linalg.det(x.cov()))
+            py = len(y)*np.log(np.linalg.det(y.cov()))
+            bics.append(pz - px - py - penalty)
 
         if len(bics) > 0 and np.max(bics) > 0:
-            change = np.argmax(bics)
-            print(win_segs[change], np.max(bics))
-            win_start = win_segs[change] + 1
+            change = win_segs[np.argmax(bics)]
+            print(change, np.max(bics), len(win.turn.unique()) > 1)
+            win_start = change
         else:
             win_start = win_end
 
