@@ -33,9 +33,16 @@ def preprocess(name, path, int_idx=True):
         ali['spkr'] = ali.index.str[:9].astype(np.uint16)
 
     ali.reset_index(drop=True, inplace=True)
-
     return ali
 
+# penalty is calculated as 0.25*N*(N + 3) where N is #dimensions
+# theta is obtained empirically from f1 score of training data
+def calc_bic(x, y, penalty=409.5, theta=1.82):
+    px = np.log(np.linalg.det(x.cov()))
+    py = np.log(np.linalg.det(y.cov()))
+    pz = np.log(np.linalg.det(pd.concat((x, y)).cov()))
+    len_z = len(x) + len(y)
+    return len_z*pz - len(x)*px - len(y)*py - penalty*np.log(2*len_z)*theta
 
 def cluster_seq(ali):
     for n in ali.turn.unique():
