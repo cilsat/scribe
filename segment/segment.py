@@ -31,7 +31,7 @@ def calc_aicc(df, idx, win):
     px = np.log(det(x.cov()))
     py = np.log(det(y.cov()))
     pz = np.log(det(pd.concat((x, y)).cov()))
-    return win*pz - 0.5*win*(px + py) 
+    return win*pz - 0.5*win*(px + py)
 
 def calc_bic(df, idx, win):
     x = df.iloc[idx-win:idx].drop(['turn', 'ord', 'phon'], axis=1)
@@ -39,30 +39,33 @@ def calc_bic(df, idx, win):
     px = np.log(det(x.cov()))
     py = np.log(det(y.cov()))
     pz = np.log(det(pd.concat((x, y)).cov()))
-    return win*pz - 0.5*win*(px + py) 
+    return win*pz - 0.5*win*(px + py)
 
-def segment(df_ali, win=150, theta=1.0):
-    d = len(df_ali.columns)
-    p = 0.25*d*(d + 3)*np.log(2*win)*theta
+def segment(ali, win_size=150, theta=1.82):
+    dim = len(ali.columns) - 4
+    pen = 0.25*dim*(dim + 3)*theta
+    lbl = ali.loc[ali.turn.diff() != 0].ord
 
-    seg = df_ali.reset_index().groupby(df_ali.ord)['index'].first()
-    seg = seg.loc[(seg > win) & (seg < len(df_ali) - win)]
-    bic = np.array([calc_bic(df_ali, n, win) - p for n in seg])
-
-    return pd.Series(bic, index=seg)
+    win_start = 0
+    while True:
+        win = ali.loc[win_start:win_start + win_size]
 
 def segment3(ali, win_size=500, theta=1.82):
     dim = len(ali.columns) - 3
     pen = 0.25*dim*(dim + 3)*theta
 
+    lbl = ali.loc[ali.turn.diff() != 0].ord
+
+    changes = []
     win_start = 0
+    win_last = ali.ord.iloc[-1]
     while True:
         end_frame = ali.loc[ali.ord == win_start].index[0] + win_size
-        if end_frame > len(ali): break
+        if win_start >= win_last or end_frame > len(ali): break
 
         win_end = int(ali.loc[end_frame].ord)
         win = ali.loc[(ali.ord >= win_start) & (ali.ord <= win_end)]
-        pz = len(win)*np.log(np.linalg.det(win.drop(
+        pz = len(win)*np.log(det(win.drop(
             ['ord','turn','phon'],axis=1).cov()))
         penalty = pen*np.log(2*len(win))
 
@@ -75,18 +78,19 @@ def segment3(ali, win_size=500, theta=1.82):
                     ['ord', 'turn', 'phon'], axis=1)
             y = ali.loc[(ali.ord >= n) & (ali.ord <= win_end)].drop(
                     ['ord', 'turn', 'phon'], axis=1)
-            px = len(x)*np.log(np.linalg.det(x.cov()))
-            py = len(y)*np.log(np.linalg.det(y.cov()))
+            px = len(x)*np.log(det(x.cov()))
+            py = len(y)*np.log(det(y.cov()))
             bics.append(pz - px - py - penalty)
 
         if len(bics) > 0 and np.max(bics) > 0:
             change = win_segs[np.argmax(bics)]
             print(change, np.max(bics), len(win.turn.unique()) > 1)
+            changes.append(change)
             win_start = change
         else:
             win_start = win_end
 
-        #print(win.index[0], win_start, len(win.turn.unique()) > 1, bics)
+    return np.array(changes)
 
 def sil_segment(df_ali, theta=2.0):
     """
@@ -123,20 +127,25 @@ def sil_segment(df_ali, theta=2.0):
 def preprocess(name, path='.', int_idx=False):
     phon = ali2df(os.path.join(path, name+'.ctm'), 'phon')
     mfcc = ali2df(os.path.join(path, name+'.mfc'), 'delta')
+    vad = ali2df(os.path.join(path, name+'.vad'), 'vad')
 
     fidx = phon.index.unique()
     fmap = dict(zip(fidx, range(len(fidx))))
     phon.index = phon.index.map(lambda x: fmap[x])
     mfcc.index = mfcc.index.map(lambda x: fmap[x])
+    vad.index = vad.index.map(lambda x: fmap[x])
+
     ali = align_phones(mfcc, phon, seq=True)
     count = ali.groupby([ali.index, ali.ord]).phon.count().values.tolist()
     ali.ord = [l for n in range(len(count)) for l in [n]*count[n]]
     ali['turn'] = np.array(ali.index, dtype=np.uint16)
-    
+    ali['vad'] = vad
+
     if not int_idx:
         rmap = dict(zip(range(len(fidx)), fidx))
         ali.index = ali.index.map(lambda x: rmap[x])
 
     ali.reset_index(drop=True, inplace=True)
     return ali
+
 

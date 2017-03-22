@@ -37,8 +37,12 @@ sox $files $out.wav
 
 # compute raw MFCCs of concatenated audio file and output to MFC file
 compute-mfcc-feats scp:$out.scp ark:- | \
-  add-deltas ark:- ark:- | \
+  copy-feats ark:- ark,scp:$out.ark,$out"_feats.scp"
+add-deltas scp:$out"_feats.scp" ark:- | \
   copy-feats ark:- ark,t:$out.mfc
+
+# compute VAD of extracted feats
+compute-vad scp:$out"_feats.scp" ark,t:$out.vad
 
 # generate lattice and align phones
 gmm-latgen-faster --max-active=7000 --beam=13.0 --lattice-beam=6.0 \

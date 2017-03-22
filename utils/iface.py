@@ -32,6 +32,14 @@ def ali2df(ali_file, raw='phon', fold=None):
         df.index = [n for r in raw for n in [r[0].split('[')[0].strip()]*(len(r) - 1)]
         df.columns = ['c'+str(n) for n in range(39)]
 
+    elif raw == 'vad':
+        with open(ali_file) as f: raw = f.read().splitlines()
+        vad = []
+        for r in raw:
+            k, v = r.split('  ')
+            vad.extend([(k, int(n)) for n in v[2:-2].split()])
+        return pd.Series([v[1] for v in vad], index=[v[0] for v in vad], dtype=np.bool)
+
     else:
         with open(ali_file) as f: raw = f.read().split(']')[:-1]
         raw[:] = [r.strip().splitlines() for r in raw]
