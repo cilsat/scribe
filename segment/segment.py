@@ -5,9 +5,13 @@ import pandas as pd
 import os
 from scipy.stats import multivariate_normal
 from numpy.linalg import det
+from numpy.linalg import norm
+from numpy.linalg import trace
+from numpy.linalg import inv
 
 from ..utils.iface import ali2df
 from ..feats.feats import align_phones
+from ..feats.segmentaxis import segment_axis as sa
 
 def calc_glr(df, seg=(0, 0, 0), theta=2.0):
     x = df.loc[(df.ord > seg[0]) & (df.ord < seg[1])].drop(['ord', 'phon'], axis=1)
@@ -25,23 +29,32 @@ def calc_glr(df, seg=(0, 0, 0), theta=2.0):
     zm = multivariate_normal.logpdf(z, z.mean(), z.cov())
     return (np.sum(zm) - np.sum(np.hstack((xm, ym))))/len(z)**theta
 
-def calc_aicc(df, idx, win):
-    x = df.iloc[idx-win:idx].drop(['turn', 'ord', 'phon'], axis=1)
-    y = df.iloc[idx:idx+win].drop(['turn', 'ord', 'phon'], axis=1)
-    px = np.log(det(x.cov()))
-    py = np.log(det(y.cov()))
-    pz = np.log(det(pd.concat((x, y)).cov()))
-    return win*pz - 0.5*win*(px + py)
+def calc_bic(x, y, theta=1.82):
+    px = np.log(det(np.cov(x, rowvar=False)))
+    py = np.log(det(np.cov(x, rowvar=False)))
+    pz = np.log(det(np.cov(np.vstack((x, y)), rowvar=False)))
+    p = x.shape[1]
+    # Nz/2 log|CovZ| - Nx/2 log|CovX| - Nx/2 log|CovY| - lambda*P
+    return len(x)*(pz - 0.5*(px - py)) - 0.25*p*(p + 3)*np.log(len(x))*theta
 
-def calc_bic(df, idx, win):
-    x = df.iloc[idx-win:idx].drop(['turn', 'ord', 'phon'], axis=1)
-    y = df.iloc[idx:idx+win].drop(['turn', 'ord', 'phon'], axis=1)
-    px = np.log(det(x.cov()))
-    py = np.log(det(y.cov()))
-    pz = np.log(det(pd.concat((x, y)).cov()))
-    return win*pz - 0.5*win*(px + py)
+def calc_kl2(x, y):
+    cx = np.cov(x, rowvar=False)
+    cy = np.cov(y, rowvar=False)
+    cix = inv(cx)
+    ciy = inv(cy)
+    dxy = np.mean(x, axis=0) - np.mean(y, axis=0)
+    return trace((cx - cy)*(ciy - cix)) + trace((ciy + cix)*np.outer(dxy, dxy))
 
-def segment(ali, win_size=150, theta=1.82):
+def calc_kl(x, y):
+    cx = np.cov(x, rowvar=False)
+    cy = np.cov(y, rowvar=False)
+    cix = inv(cx)
+    ciy = inv(cy)
+    # (mx - my)*(mx - my).T
+    dxy = np.outer(np.mean(x, axis=0) - np.mean(y, axis=0))
+    return 0.5*trace((cx - cy)*(ciy - cix)) + 0.5*trace((ciy - cix)*dxy)
+
+def calc_per_frame(ali, win_size=150, theta=1.82):
     dim = len(ali.columns) - 4
     pen = 0.25*dim*(dim + 3)*theta
     lbl = ali.loc[ali.turn.diff() != 0].ord
@@ -51,11 +64,13 @@ def segment(ali, win_size=150, theta=1.82):
         win = ali.loc[win_start:win_start + win_size]
 
 def segment3(ali, win_size=500, theta=1.82):
+    # get frame dimensions and calculate BIC penalty
     dim = len(ali.columns) - 3
     pen = 0.25*dim*(dim + 3)*theta
-
+    # identify real segment changes
     lbl = ali.loc[ali.turn.diff() != 0].ord
 
+    # main loop: works on frames aligned to segment boundaries
     changes = []
     win_start = 0
     win_last = ali.ord.iloc[-1]
@@ -148,4 +163,18 @@ def preprocess(name, path='.', int_idx=False):
     ali.reset_index(drop=True, inplace=True)
     return ali
 
+def test(name, win=200):
+    import matplotlib.pyplot as plt
+    from scipy.signal import savgol_filter
 
+    ali = preprocess(name)
+    vcd = ali.loc[ali.vad].reset_index(drop=True).drop(['ord', 'phon', 'vad'], axis=1)
+    lbl = vcd.loc[vcd.turn.diff() > 0].index
+    vcd.drop('turn', axis=1, inplace=True)
+
+    calc = np.array([(n+win, calc_bic(i[:win], i[win:]), calc_kl2(i[:win], i[win:])) for n, i in enumerate(sa(vcd, win*2, win*2-1, axis=0))])
+
+    plt.plot(calc[:, 0], savgol_filter(calc[:, 1], 101, 3)/calc[:,1].std())
+    plt.plot(calc[:, 0], savgol_filter(calc[:, 2], 101, 3)/calc[:,2].std())
+    plt.plot(np.arange(len(calc)), np.zeros(len(calc)))
+    plt.plot(lbl, [0]*len(lbl), '.')
