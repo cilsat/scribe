@@ -16,7 +16,7 @@ files=()
 filenames=()
 for s in $spkr
 do
-  f=$(find $root/$s -iname "*.wav" | shuf | head -n 1)
+  f=$(find $root/$s -iname "*Z*.wav" | shuf | head -n 1)
   files+=($f)
   fn=$(echo $f | rev | cut -d '/' -f1 | rev)
   fn=${fn%.wav}

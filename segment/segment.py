@@ -3,56 +3,78 @@
 import numpy as np
 import pandas as pd
 import os
-from scipy.stats import multivariate_normal
+
+from scipy.stats import multivariate_normal as mn
 from numpy.linalg import det
 from numpy.linalg import norm
-from numpy.linalg import trace
 from numpy.linalg import inv
+
+from sklearn.mixture import GaussianMixture as gmm
 
 from ..utils.iface import ali2df
 from ..feats.feats import align_phones
 from ..feats.segmentaxis import segment_axis as sa
 
-def calc_glr(df, seg=(0, 0, 0), theta=2.0):
-    x = df.loc[(df.ord > seg[0]) & (df.ord < seg[1])].drop(['ord', 'phon'], axis=1)
-    y = df.loc[(df.ord > seg[1]) & (df.ord < seg[2])].drop(['ord', 'phon'], axis=1)
+def cusum(z):
+    means_init = np.vstack((np.mean(z[:10], axis=0), np.mean(z[-10:], axis=0)))
+    clf = gmm(n_components=2, means_init=means_init)
+    clf.fit(z)
+    c = np.uint16(0.5*z.shape[0])
+    return np.sum(mn.logpdf(z[:c], clf.means_[0], clf.covariances_[0])) - np.sum(mn.logpdf(z[c:], clf.means_[1], clf.covariances_[1]))
 
-    """
-    if len(x) < len(x.columns) - 1 or len(y) < len(y.columns):
-        print(x.iloc[0].name, y.iloc[0].name, "singular")
-        return
-    """
-
-    z = pd.concat((x, y))
-    xm = multivariate_normal.logpdf(x, x.mean(), x.cov())
-    ym = multivariate_normal.logpdf(y, y.mean(), y.cov())
-    zm = multivariate_normal.logpdf(z, z.mean(), z.cov())
+def glr(x, y, theta=1.82):
+    xm = mn.logpdf(x, np.mean(x, axis=0), np.cov(x, rowvar=False))
+    ym = mn.logpdf(y, np.mean(y, axis=0), np.cov(y, rowvar=False))
+    z = np.vstack((x, y))
+    zm = mn.logpdf(z, np.mean(z, axis=0), np.cov(z, rowvar=False))
     return (np.sum(zm) - np.sum(np.hstack((xm, ym))))/len(z)**theta
 
-def calc_bic(x, y, theta=1.82):
+def bic(x, y, theta=1.82):
     px = np.log(det(np.cov(x, rowvar=False)))
     py = np.log(det(np.cov(x, rowvar=False)))
     pz = np.log(det(np.cov(np.vstack((x, y)), rowvar=False)))
     p = x.shape[1]
     # Nz/2 log|CovZ| - Nx/2 log|CovX| - Nx/2 log|CovY| - lambda*P
-    return len(x)*(pz - 0.5*(px - py)) - 0.25*p*(p + 3)*np.log(len(x))*theta
+    return 0.5*len(x)*(pz - 0.5*(px + py)) - 0.25*p*(p + 3)*np.log(len(x))*theta
 
-def calc_kl2(x, y):
+def xbic(x, y):
+    px = np.log(det(np.cov(x, rowvar=False)))
+    py = np.log(det(np.cov(x, rowvar=False)))
+    pz = np.log(det(np.cov(np.vstack((x, y)), rowvar=False)))
+    return pz
+
+def kl2(x, y):
     cx = np.cov(x, rowvar=False)
     cy = np.cov(y, rowvar=False)
     cix = inv(cx)
     ciy = inv(cy)
     dxy = np.mean(x, axis=0) - np.mean(y, axis=0)
-    return trace((cx - cy)*(ciy - cix)) + trace((ciy + cix)*np.outer(dxy, dxy))
+    return np.trace((cx - cy)*(ciy - cix)) + np.trace((ciy + cix)*np.outer(dxy, dxy))
 
-def calc_kl(x, y):
+def kl(x, y):
     cx = np.cov(x, rowvar=False)
     cy = np.cov(y, rowvar=False)
     cix = inv(cx)
     ciy = inv(cy)
     # (mx - my)*(mx - my).T
-    dxy = np.outer(np.mean(x, axis=0) - np.mean(y, axis=0))
-    return 0.5*trace((cx - cy)*(ciy - cix)) + 0.5*trace((ciy - cix)*dxy)
+    dxy = np.mean(x, axis=0) - np.mean(y, axis=0)
+    ddxy = np.outer(dxy, dxy)
+    return 0.5*np.trace((cx - cy)*(ciy - cix)) + 0.5*np.trace(ddxy*(ciy - cix))
+
+def dsd(x, y):
+    cx = np.cov(x, rowvar=False)
+    cy = np.cov(y, rowvar=False)
+    cix = inv(cx)
+    ciy = inv(cy)
+    return np.trace((cx - cy)*(ciy - cix))
+
+def gish(x, y):
+    cx = np.cov(x, rowvar=False)
+    cy = np.cov(y, rowvar=False)
+    alpha = len(x)/(len(x) + len(y))
+    beta = len(y)/(len(y) + len(x))
+    w = alpha*cx + beta*cy
+    return -0.5*len(x)*np.log(det(cx)**alpha*det(cy)**(1-alpha)/det(w))
 
 def calc_per_frame(ali, win_size=150, theta=1.82):
     dim = len(ali.columns) - 4
@@ -62,6 +84,23 @@ def calc_per_frame(ali, win_size=150, theta=1.82):
     win_start = 0
     while True:
         win = ali.loc[win_start:win_start + win_size]
+
+def segment(df, fn=kl2, win=250, thr=2.0):
+    f = 0
+    l = f + win
+    m = np.uint8(0.5*win)
+    c = f + m
+    hyp = []
+    val = []
+    while True:
+        if l > len(df): break
+        if fn(df.iloc[f:f+c].values, df.iloc[f+c:l].values) > thr:
+            print("something")
+            f = c
+        else:
+            f = l
+        l = f + win
+        c = f + m
 
 def segment3(ali, win_size=500, theta=1.82):
     # get frame dimensions and calculate BIC penalty
@@ -163,18 +202,34 @@ def preprocess(name, path='.', int_idx=False):
     ali.reset_index(drop=True, inplace=True)
     return ali
 
-def test(name, win=200):
+def test_lbl(name, fn=dsd, thr=2.0, win=200, theta=1.83):
     import matplotlib.pyplot as plt
     from scipy.signal import savgol_filter
 
     ali = preprocess(name)
     vcd = ali.loc[ali.vad].reset_index(drop=True).drop(['ord', 'phon', 'vad'], axis=1)
     lbl = vcd.loc[vcd.turn.diff() > 0].index
-    vcd.drop('turn', axis=1, inplace=True)
+    raw = vcd.drop('turn', axis=1).values
 
-    calc = np.array([(n+win, calc_bic(i[:win], i[win:]), calc_kl2(i[:win], i[win:])) for n, i in enumerate(sa(vcd, win*2, win*2-1, axis=0))])
+    calc = np.array([(n+win, fn(i[:win], i[win:])) for n, i in enumerate(sa(raw, win*2, win*2-1, axis=0))])
 
     plt.plot(calc[:, 0], savgol_filter(calc[:, 1], 101, 3)/calc[:,1].std())
-    plt.plot(calc[:, 0], savgol_filter(calc[:, 2], 101, 3)/calc[:,2].std())
-    plt.plot(np.arange(len(calc)), np.zeros(len(calc)))
-    plt.plot(lbl, [0]*len(lbl), '.')
+    plt.plot(np.arange(len(calc)), [thr]*len(calc))
+    plt.plot(lbl, [thr]*len(lbl), '.')
+
+def test_unk(path, fn=kl2, thr=2.0, win=200, theta=1.83):
+    import matplotlib.pyplot as plt
+    from scipy.signal import savgol_filter
+
+    ali = pd.concat((ali2df(os.path.join(path, 'mfc'), 'delta'),
+                     ali2df(os.path.join(path, 'vad'), 'vad')),
+                     axis=1)
+
+    vcd = ali.loc[ali.vad].reset_index(drop=True)
+    raw = vcd.drop('vad', axis=1).values
+
+    calc = np.array([(n+win, fn(i[:win], i[win:])) for n, i in enumerate(sa(raw, win*2, win*2-1, axis=0))])
+
+    plt.plot(calc[:, 0], savgol_filter(calc[:, 1], 101, 3)/calc[:,1].std())
+    plt.plot(np.arange(len(calc)), [thr]*len(calc))
+

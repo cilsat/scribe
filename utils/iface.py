@@ -56,6 +56,15 @@ def df2hdf(df, df_name, hdf_file):
 def hdf2df(hdf_file, df_name):
     return pd.read_hdf(hdf_file, df_name)
 
+def srt2df(srt_file, frame_len=10):
+    raw = open(srt_file).read().split('\n\n')[:-1]
+    srt = pd.DataFrame.from_dict({int(n[0])-1: [n[1]]+n[3:] for n in [i.split() for i in raw]}, orient='index')
+    srt.columns = ['start', 'end', 'spkr']
+    f = lambda x: (3600000*int(x[:2]) + 60000*int(x[3:5]) + 1000*int(x[6:8]) + int(x[-3:]))/frame_len
+    srt.start = srt.start.map(f).astype(int)
+    srt.end = srt.end.map(f).astype(int)
+    return srt
+
 def parse_files(mfcc_files=[], phon_files=[]):
     mfcc_files.sort()
     phon_files.sort()
