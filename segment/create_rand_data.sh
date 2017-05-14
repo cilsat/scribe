@@ -1,4 +1,4 @@
-#!/bin/zsh
+#!/bin/bash
 
 # creates random concatenated audio files from speech in a given directory.
 # returns a CSV of the durations and names of the files concatenated.
