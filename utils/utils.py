@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 from numpy.linalg import norm
 from multiprocessing import Pool, cpu_count
+from subprocess import run, PIPE
 
 def apply_parallel(func, args):
     """
@@ -46,3 +47,4 @@ def lb_keough(x, y, r=40):
         if i > ub: lb_sum += (i - ub)**2
         elif i < lb: lb_sum += (i - lb)**2
     return lb_sum**0.5
+

@@ -2,9 +2,13 @@
 
 from .utils import apply_parallel
 
+import os
 import numpy as np
 import pandas as pd
 from itertools import repeat
+from scipy.io.wavfile import read
+from python_speech_features import mfcc, delta
+from subprocess import run, PIPE
 
 # read kaldi phone alignment file and return a dataframe indexed by utt/file
 # location and duration are in milliseconds and encoded to unsigned integer
@@ -68,3 +72,44 @@ def parse_files(mfcc_files=[], phon_files=[]):
     if len(phon_files) > 0: phon = apply_parallel(ali2df, phon_args)
 
     return mfcc, phon
+
+def wav2np(wav_file, nceps=13, deltas=False):
+    sr, data = read(wav_file)
+    feat = mfcc(data, sr, numcep=nceps)
+    if deltas:
+        d = delta(feat, 5)
+        dd = delta(d, 5)
+        feat = np.hstack((feat, d, dd))
+    return feat
+
+def gen_rand(wavpath, txtpath, outpath, nfiles=5, spontan=True, delta=True):
+    import sox
+
+    # find all wav files in path
+    if spontan:
+        wavs = run(['find', wavpath, '-iname', '*Z*.wav'], stdout=PIPE)
+    else:
+        wavs = run(['find', wavpath, '-iname', '*.wav'], stdout=PIPE)
+
+    # randomly choose nfiles, get transcript, and write to file
+    wavs = np.random.choice(wavs.stdout.decode('utf-8').splitlines(), nfiles).tolist()
+    utts, txts = inti2_get_text(wavs, txtpath)
+    with open(outpath + '.scp', 'w') as f:
+        [f.write(u + '\t' + t + '\t' + w + '\n') for u, t, w in zip(utts, wavs, txts)]
+
+    # concatenate wavs and write to file
+    cbn = sox.Combiner()
+    cbn.build(wavs, outpath + '.wav', 'concatenate')
+
+def inti2_get_text(wavs, txtpath):
+    txts = []
+    utts = []
+    for w in wavs:
+        uttid = os.path.basename(w)
+        uttid = uttid[0] + uttid[6:13]
+        utts.append(uttid)
+        txt = run(['ag', uttid, txtpath], stdout=PIPE).stdout.decode('utf-8')
+        txt = ' '.join(txt.split()[1:])
+        txts.append(txt)
+    return utts, txts
+

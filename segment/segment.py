@@ -4,9 +4,9 @@ import numpy as np
 import pandas as pd
 import os
 from scipy.stats import multivariate_normal
+from numpy import trace
 from numpy.linalg import det
 from numpy.linalg import norm
-from numpy.linalg import trace
 from numpy.linalg import inv
 
 from ..utils.iface import ali2df
@@ -35,7 +35,7 @@ def calc_bic(x, y, theta=1.82):
     pz = np.log(det(np.cov(np.vstack((x, y)), rowvar=False)))
     p = x.shape[1]
     # Nz/2 log|CovZ| - Nx/2 log|CovX| - Nx/2 log|CovY| - lambda*P
-    return len(x)*(pz - 0.5*(px - py)) - 0.25*p*(p + 3)*np.log(len(x))*theta
+    return len(x)*(pz - 0.5*(px + py)) - 0.25*p*(p + 3)*np.log(len(x))*theta
 
 def calc_kl2(x, y):
     cx = np.cov(x, rowvar=False)
@@ -163,7 +163,7 @@ def preprocess(name, path='.', int_idx=False):
     ali.reset_index(drop=True, inplace=True)
     return ali
 
-def test(name, win=200):
+def test(name, win=200, theta=1.0):
     import matplotlib.pyplot as plt
     from scipy.signal import savgol_filter
 
@@ -172,7 +172,7 @@ def test(name, win=200):
     lbl = vcd.loc[vcd.turn.diff() > 0].index
     vcd.drop('turn', axis=1, inplace=True)
 
-    calc = np.array([(n+win, calc_bic(i[:win], i[win:]), calc_kl2(i[:win], i[win:])) for n, i in enumerate(sa(vcd, win*2, win*2-1, axis=0))])
+    calc = np.array([(n+win, calc_bic(i[:win], i[win:], theta), calc_kl2(i[:win], i[win:])) for n, i in enumerate(sa(vcd.values, win*2, win*2-1, axis=0))])
 
     plt.plot(calc[:, 0], savgol_filter(calc[:, 1], 101, 3)/calc[:,1].std())
     plt.plot(calc[:, 0], savgol_filter(calc[:, 2], 101, 3)/calc[:,2].std())
