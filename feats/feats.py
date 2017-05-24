@@ -118,6 +118,7 @@ def calc_segs(spk):
 
     return pd.concat((phon, dur, mean, d_dur, d_mean, dd_dur, dd_mean), axis=1)
 
+
 # compute segment-level features for utterance classification from a phone
 # aligned mfcc dataframe. features include per segment frame averages, variances
 # and their deltas.
@@ -151,4 +152,8 @@ def compute_utt_feats(df_seg):
     df_utt = df_utt[np.all(np.isfinite(df_utt), axis=1)]
 
     return df_utt
+
+
+def compute_vad(feats):
+    log_eng = feats.values[:, 0]
 

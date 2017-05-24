@@ -5,6 +5,7 @@ from .utils import apply_parallel
 import os
 import numpy as np
 import pandas as pd
+import pysox
 from itertools import repeat
 from scipy.io.wavfile import read
 from python_speech_features import mfcc, delta
@@ -91,7 +92,7 @@ def wav2np(wav_file, nceps=13, deltas=False):
         feat = np.hstack((feat, d, dd))
     return feat
 
-def gen_rand(wavpath, txtpath, outpath, nfiles=5, spontan=True, delta=True):
+def gen_rand(wavpath, txtpath, outpath, write=False, nfiles=5, spontan=True, delta=True):
     import sox
 
     # find all wav files in path
@@ -102,17 +103,30 @@ def gen_rand(wavpath, txtpath, outpath, nfiles=5, spontan=True, delta=True):
 
     # randomly choose nfiles, get transcript, and write to file
     wavs = np.random.choice(wavs.stdout.decode('utf-8').splitlines(), nfiles).tolist()
-    utts, txts = inti2_get_text(wavs, txtpath)
-    with open(outpath + '.scp', 'w') as f:
-        [f.write(u + '\t' + t + '\t' + w + '\n') for u, t, w in zip(utts, wavs, txts)]
+    utts, lens, txts = inti2_get_text(wavs, txtpath)
+    if write:
+        with open(outpath + '.scp', 'w') as f:
+            f.write('uttid\tlength\tspkrid\ttext\tpath\n')
+            [f.write(u + '\t' + str(l) + '\t' + t + '\t' + w + '\n') for u, l, t, w in zip(utts, lens, wavs, txts)]
 
-    # concatenate wavs and write to file
-    cbn = sox.Combiner()
-    cbn.build(wavs, outpath + '.wav', 'concatenate')
+        # concatenate wavs and write to file
+        cbn = sox.Combiner()
+        cbn.build(wavs, outpath + '.wav', 'concatenate')
+    else:
+        feats = []
+        lens = []
+        for w in wavs:
+            feat = wav2np(w, deltas=delta)
+            feats.append(feat)
+            lens.append(len(feat))
+        feats = np.vstack(feats)
+        scp = pd.DataFrame(list(zip(lens, txts, wavs)), index=utts, columns=['length', 'text', 'path'])
+        return scp, feats
 
 def inti2_get_text(wavs, txtpath):
     txts = []
     utts = []
+    lens = []
     for w in wavs:
         uttid = os.path.basename(w)
         uttid = uttid[0] + uttid[6:13]
@@ -120,5 +134,8 @@ def inti2_get_text(wavs, txtpath):
         txt = run(['ag', uttid, txtpath], stdout=PIPE).stdout.decode('utf-8')
         txt = ' '.join(txt.split()[1:])
         txts.append(txt)
-    return utts, txts
+        wave = pysox.CSoxStream(w)
+        info = wave.get_signal().get_signalinfo()
+        lens.append(info['length']/info['rate'])
+    return utts, lens, txts
 
