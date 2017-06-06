@@ -178,6 +178,7 @@ def sil_segment(df_ali, theta=2.0):
                 sil_b, sil_i, sil_e = (sil_b, sil_i, n)
     return pd.Series(glrs, index=ords)
 
+
 def preprocess(name, path='.', int_idx=False):
     phon = ali2df(os.path.join(path, name+'.ctm'), 'phon')
     mfcc = ali2df(os.path.join(path, name+'.mfc'), 'delta')
@@ -202,6 +203,7 @@ def preprocess(name, path='.', int_idx=False):
     ali.reset_index(drop=True, inplace=True)
     return ali
 
+
 def test_lbl(name, fn=dsd, thr=2.0, win=200, theta=1.83):
     import matplotlib.pyplot as plt
     from scipy.signal import savgol_filter
@@ -216,6 +218,7 @@ def test_lbl(name, fn=dsd, thr=2.0, win=200, theta=1.83):
     plt.plot(calc[:, 0], savgol_filter(calc[:, 1], 101, 3)/calc[:,1].std())
     plt.plot(np.arange(len(calc)), [thr]*len(calc))
     plt.plot(lbl, [thr]*len(lbl), '.')
+
 
 def test_unk(path, fn=kl2, thr=2.0, win=200, theta=1.83):
     import matplotlib.pyplot as plt
@@ -233,3 +236,11 @@ def test_unk(path, fn=kl2, thr=2.0, win=200, theta=1.83):
     plt.plot(calc[:, 0], savgol_filter(calc[:, 1], 101, 3)/calc[:,1].std())
     plt.plot(np.arange(len(calc)), [thr]*len(calc))
 
+
+def seg_lbl(wav_path, txt_path, name, fn=kl2, thr=2.0, win=200, theta=1.83):
+    from scipy.signal import savgol_filter
+
+    scp, mfc = gen_rand(wav_path, txt_path, name)
+    vad = compute_vad(mfc)
+    idx = [r for n in scp.index for r in [n]*scp.loc[n, 'length']]
+    ali = pd.concat((pd.DataFrame(mfc), pd.Series(vad, name='vad'), pd.Series(idx, name='uttid')), axis=1)

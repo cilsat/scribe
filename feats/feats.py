@@ -154,6 +154,15 @@ def compute_utt_feats(df_seg):
     return df_utt
 
 
-def compute_vad(feats):
-    log_eng = feats.values[:, 0]
+def compute_vad(feats, context=5, proportion=0.8):
+    # assumes first column of feats is log energy
+    log_eng = feats[:, 0]
+    # simple energy based cutoff, needs adjustment for real time usage
+    cutoff = 5 + 0.5*log_eng.mean()
+    # within a context window centred around the current frame, count the
+    # number of frames above the cutoff point
+    props = np.array([np.sum(win > cutoff) for win in sa(np.concatenate((np.zeros(context), log_eng, np.zeros(context))), context*2 + 1, context*2)])
+    # return True (voiced) if the number of frames above the cutoff is above a
+    # certain proportion
+    return props/context > proportion
 

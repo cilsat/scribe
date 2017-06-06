@@ -5,7 +5,7 @@ import numpy as np
 import os
 import sys
 from datetime import timedelta
-from subprocess import run, PIPE
+from subprocess import run, PIPE, DEVNULL
 
 
 def seg2df(path):
@@ -14,31 +14,21 @@ def seg2df(path):
     df = pd.read_csv(path, skiprows=lines, delimiter=' ', header=None,
             usecols=[2,3,7], names=['start', 'dur', 'spkr'])
     df.spkr = df.spkr.str[1:].astype(np.int16)
-    f = lambda x: timedelta(seconds=x/100.)
-    df["start_t"] = df.start.apply(f)
-    df["dur_t"] = df.dur.apply(f)
+    #f = lambda x: timedelta(seconds=x/100.)
     df[:] = df.sort_values('start').reset_index(drop=True)
+    df['lbl'] = df.spkr
+    df['gen'] = [0]*len(df)
     return df
 
 
-def fix_lbl(path, df):
-    # "spkr 0" is assumed to be silence and is assumed to be accurate
-    dfspk = df.loc[df.spkr != 0]
-
-    # function to play particular segment
-    p = lambda x: run(['play', path, 'trim', str(dfspk.loc[x].start * 0.01),
-        str(dfspk.loc[x].dur * 0.01)])
-    p2 = lambda x, y: run(['play', path, 'trim', str(dfspk.loc[x].start * 0.01),
-        str(dfspk.loc[x:y].dur.sum() * 0.01)])
-
-    # get hypothesized speaker change points
-    smap = {n: n for n in dfspk.spkr.unique()}
+def fix_lbl(name, smap, gmap):
+    df = seg2df(seg)
 
 
 def play(seg, df):
     for n, i in df.iterrows():
-        print(n, i.spkr, i.start, i.dur)
-        run(['play', seg, 'trim', str(i.start*0.01), str(i.dur*0.01)])
+        print(n, i.spkr, i.start*0.01/3600, i.dur*0.01)
+        run(['play', seg, 'trim', str(i.start*0.01), str(i.dur*0.01)], stdout=DEVNULL)
 
 
 def splay(seg, df, *args):
