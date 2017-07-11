@@ -21,8 +21,25 @@ def seg2df(path):
     return df
 
 
-def fix_lbl(name, smap, gmap):
-    df = seg2df(seg)
+def lbl2df(path, start=10):
+    lbls = [n for n in os.listdir(path) if n.endswith('.lbl')]
+    lbls.sort()
+    dfs = []
+    cls = start
+    for n, i in enumerate(lbls):
+        df = pd.read_csv(i, delimiter=' ', index_col=0)
+        df['file'] = [n]*len(df)
+        cmap = {n: i + cls for i, n in enumerate(df.loc[df.lbl > 0, 'lbl'].unique())}
+        for n in range(-2, 1): cmap[n] = n
+        df['cls'] = df.lbl.map(cmap)
+        cls += len(cmap)
+        dfs.append(df)
+    dfs = pd.concat(dfs)
+    return {n: i for n, i in enumerate(lbls)}, dfs
+
+
+def cplay(dfs, nfile, lbls, lbl):
+    play(lbls[nfile].split('.')[0] + '.mp3', dfs.loc[(dfs.file == nfile) & (dfs.lbl == lbl)])
 
 
 def play(seg, df):
@@ -34,6 +51,11 @@ def play(seg, df):
 def splay(seg, df, *args):
     for spk in args:
         play(seg, df.loc[df.spkr == spk])
+
+
+def lbl2seg(path):
+    lbl = pd.read_csv(path, delimiter=' ', index_col=0)
+    cls = [lbl.loc[lbl.lbl == n] for n in lbl.lbl.unique()]
 
 
 if __name__ == "__main__":
