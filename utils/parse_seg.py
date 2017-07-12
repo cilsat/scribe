@@ -54,8 +54,25 @@ def splay(seg, df, *args):
 
 
 def lbl2seg(path):
-    lbl = pd.read_csv(path, delimiter=' ', index_col=0)
-    cls = [lbl.loc[lbl.lbl == n] for n in lbl.lbl.unique()]
+    name = path.split('.')[0]
+    df = pd.read_csv(path, delimiter=' ', index_col=0)
+
+    df.index = [name]*len(df)
+    gmap = {-1: 'U', 0: 'M', 1: 'F'}
+    df.gen = df.gen.map(gmap)
+    lmap = {n: 'S' + str(n) for n in df.lbl.unique()}
+    df.lbl = df.lbl.map(lmap)
+    df[['start', 'dur']] = df[['start', 'dur']].astype(str)
+
+    df['ch'] = '1'
+    df['env'] = 'S'
+    df['typ'] = 'U'
+    df = df[['ch', 'start', 'dur', 'gen', 'env', 'typ', 'lbl']]
+
+    with open(name + '-ref.seg', 'w') as f:
+        for l in df.lbl.unique():
+            f.write(";; cluster " + l + "\n")
+            f.writelines([' '.join([n[0]] + list(n[1].values)) + '\n' for n in df.loc[df.lbl == l].iterrows()])
 
 
 if __name__ == "__main__":
