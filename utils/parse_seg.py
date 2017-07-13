@@ -70,7 +70,7 @@ def lbl2seg(path):
     df = df[['ch', 'start', 'dur', 'gen', 'env', 'typ', 'lbl']]
 
     with open(name + '-ref.seg', 'w') as f:
-        f.writelines([';; cluster ' + l + '\n' + '\n'.join([' '.join([n[0]] + list(n[1].values)) for n in df.loc[df.lbl == 1].iterrows()]) for l in df.lbl.unique()])
+        f.writelines([';; cluster ' + l + '\n' + '\n'.join([' '.join([n[0]] + list(n[1].values)) for n in df.loc[df.lbl == l].iterrows()]) + '\n' for l in df.lbl.unique()])
 
 
 if __name__ == "__main__":
