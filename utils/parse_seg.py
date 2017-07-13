@@ -31,10 +31,10 @@ def lbl2df(path, start=10):
         df['file'] = [n]*len(df)
         cmap = {n: i + cls for i, n in enumerate(df.loc[df.lbl > 0, 'lbl'].unique())}
         for n in range(-2, 1): cmap[n] = n
-        df['cls'] = df.lbl.map(cmap)
+        df.lbl = df.lbl.map(cmap)
         cls += len(cmap)
         dfs.append(df)
-    dfs = pd.concat(dfs)
+    dfs = pd.concat(dfs).reset_index(drop=True)
     return {n: i for n, i in enumerate(lbls)}, dfs
 
 
@@ -70,7 +70,7 @@ def lbl2seg(path):
     df = df[['ch', 'start', 'dur', 'gen', 'env', 'typ', 'lbl']]
 
     with open(name + '-ref.seg', 'w') as f:
-        f.writelines([';; cluster ' + l + '\n' + '\n'.join([' '.join([n[0]] + list(n[1].values)) for n in df.loc[df.lbl == 1].iterrows()]) for l in df.lbl.unique()])
+        f.writelines([';; cluster ' + l + '\n' + '\n'.join([' '.join([n[0]] + list(n[1].values)) for n in df.loc[df.lbl == 1].iterrows()])+ '\n' for l in df.lbl.unique()])
 
 
 if __name__ == "__main__":
