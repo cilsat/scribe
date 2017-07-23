@@ -31,14 +31,14 @@ def lbl2df(path, start=10):
         df['file'] = [n]*len(df)
         cmap = {n: i + cls for i, n in enumerate(df.loc[df.lbl > 0, 'lbl'].unique())}
         for n in range(-2, 1): cmap[n] = n
-        df.lbl = df.lbl.map(cmap)
+        df['cls'] = df.lbl.map(cmap)
         cls += len(cmap)
         dfs.append(df)
     dfs = pd.concat(dfs).reset_index(drop=True)
     return {n: i for n, i in enumerate(lbls)}, dfs
 
 
-def cplay(dfs, nfile, lbls, lbl):
+def cplay(nfile, lbl, dfs, lbls):
     play(lbls[nfile].split('.')[0] + '.mp3', dfs.loc[(dfs.file == nfile) & (dfs.lbl == lbl)])
 
 
@@ -69,8 +69,44 @@ def lbl2seg(path):
     df['typ'] = 'U'
     df = df[['ch', 'start', 'dur', 'gen', 'env', 'typ', 'lbl']]
 
-    with open(name + '-ref.seg', 'w') as f:
-        f.writelines([';; cluster ' + l + '\n' + '\n'.join([' '.join([n[0]] + list(n[1].values)) for n in df.loc[df.lbl == l].iterrows()]) + '\n' for l in df.lbl.unique()])
+    return df
+
+    #with open(name + '-ref.seg', 'w') as f: f.writelines([';; cluster ' + l + '\n' + '\n'.join([' '.join([n[0]] + list(n[1].values)) for n in df.loc[df.lbl == l].iterrows()]) + '\n' for l in df.lbl.unique()])
+
+
+def calc_der(lbl):
+    from scipy.optimize import linear_sum_assignment as lsa
+
+    # the labels -2 and -1, and 0 are reserved for overlapping speech, non-
+    # speech, and silence, respectively, in the reference. overlapping speech,
+    # however, is not considered during the hypothesis formation, and hence is
+    # excluded from the speaker mapping.
+    sp = np.sort(lbl.lbl.unique())
+    lmap = {n: i for i, n in enumerate(sp[sp > -2])}
+    for n in range(-2, 0): lmap[n] = n
+    smap = {n: i for i, n in enumerate(lbl.spkr.unique())}
+
+    lbl['ref'] = lbl.lbl.map(lmap)
+    lbl['hyp'] = lbl.spkr.map(smap)
+    spk = lbl.loc[lbl.lbl > -2]
+
+    # obtain 1-1 mapping between speaker (hyp) and label (ref)
+    # group by label first (ref), then by speaker (hyp)
+    freq = spk.groupby([spk['ref'], spk['hyp']]).dur.sum()
+    # a normal dictionary is insufficient as both 1-n and n-1 are possible
+    # so instead create a N*M sparse matrix containing durations of hyp label
+    # N and ref label M, representing a weighted bipartite graph.
+    cmat = np.zeros((len(spk.ref.unique()), len(spk.hyp.unique())))
+    cmat[freq.index.labels] = freq.values.flat
+    # with the constraint that we can only use ONE of each N and M, optimize
+    # for largest global sum using the hungarian algorithm for maximum weight
+    # matching in bipartite graphs. as linear sum assignment calculates the
+    # minimum, we must first inverse the costs after adding a small non-zero
+    # value to avoid division by zero.
+    ref, hyp = lsa(1./(cmat + 0.1))
+
+    # calculate diarization error rate (not including overlapping segments)
+    return 1.0 - (cmat[ref, hyp].sum() / spk.dur.sum())
 
 
 if __name__ == "__main__":
