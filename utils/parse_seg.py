@@ -82,8 +82,6 @@ def lbl2seg(path):
 
     return df
 
-    #with open(name + '-ref.seg', 'w') as f: f.writelines([';; cluster ' + l + '\n' + '\n'.join([' '.join([n[0]] + list(n[1].values)) for n in df.loc[df.lbl == l].iterrows()]) + '\n' for l in df.lbl.unique()])
-
 
 def calc_der(lbl):
     from scipy.optimize import linear_sum_assignment as lsa
@@ -118,6 +116,29 @@ def calc_der(lbl):
 
     # calculate diarization error rate (not including overlapping segments)
     return 1.0 - (cmat[ref, hyp].sum() / spk.dur.sum())
+
+
+def make_ubm(out, path='/home/cilsat/data/speech/rapat', min_dur=15000, min_spk=3):
+    # concat all lbl files and make unique clusters
+    dfs = lbl2df(path, 1)
+    # get all clusters that are not the first min_spk speakers in each file
+    # the assumption here is that the first min_spk speakers are repeated across
+    # meetings
+    spk = dfs.loc[dfs.groupby(dfs.file).apply(lambda x: x.loc[x.lbl.isin(x.lbl.unique()[min_spk:])]).index.get_level_values(1)]
+    spk = spk.loc[spk.lbl > 1]
+    # find clusters that have at least min_dur seconds of speech and get them
+    segs = []
+    for n in spk.cls.unique():
+        dfc = spk.loc[spk.cls == n]
+        cum = dfc.dur.cumsum()
+        if cum.max() > min_dur:
+            df = dfc.loc[:cum.loc[cum > min_dur].index[0]]
+            # get start and end of segments in samples
+            trims = np.dstack((df.start.values, (df.start + df.dur).values)).flatten()*160
+            # write segments to file
+            run(['sox', os.path.join(path, df.file.iloc[0]), os.path.join(path, 'ubm/c'+str(n).zfill(3)+'.wav'), 'trim'] + ['='+str(n)+'s' for n in trims], stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
+
+    return pd.concat(segs)
 
 
 if __name__ == "__main__":
