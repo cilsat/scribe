@@ -5,8 +5,7 @@ import numpy as np
 import os
 import sys
 from datetime import timedelta
-from subprocess import run, PIPE, DEVNULL
-
+from subprocess import run, PIPE, DEVNULL, STDOUT
 
 def seg2df(path):
     with open(path) as f:
@@ -21,25 +20,37 @@ def seg2df(path):
     return df
 
 
-def lbl2df(path, start=10):
+def lbl2df(path, start=10, filemap=False):
     lbls = [n for n in os.listdir(path) if n.endswith('.lbl')]
     lbls.sort()
     dfs = []
     cls = start
     for n, i in enumerate(lbls):
         df = pd.read_csv(i, delimiter=' ', index_col=0)
-        df['file'] = [n]*len(df)
+        df['file'] = [n]*len(df) if filemap else [i.replace('lbl', 'mp3')]*len(df)
         cmap = {n: i + cls for i, n in enumerate(df.loc[df.lbl > 0, 'lbl'].unique())}
         for n in range(-2, 1): cmap[n] = n
         df['cls'] = df.lbl.map(cmap)
         cls += len(cmap)
         dfs.append(df)
     dfs = pd.concat(dfs).reset_index(drop=True)
-    return {n: i for n, i in enumerate(lbls)}, dfs
+
+    if filemap:
+        return {n: i for n, i in enumerate(lbls)}, dfs
+    else:
+        return dfs
 
 
-def cplay(nfile, lbl, dfs, lbls):
-    play(lbls[nfile].split('.')[0] + '.mp3', dfs.loc[(dfs.file == nfile) & (dfs.lbl == lbl)])
+def cplay(df):
+    if type(df) != pd.core.series.Series:
+        for _, i in df.iterrows():
+            print(i.name, i.lbl, i.cls, i.file, i.dur*0.01)
+            run(['play', i.file, 'trim', str(i.start*0.01), str(i.dur*0.01)],
+                    stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
+    else:
+        print(df.name, df.lbl, df.cls, df.file, df.dur*0.01)
+        run(['play', df.file, 'trim', str(df.start*0.01), str(df.dur*0.01)],
+                stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
 
 
 def play(seg, df):
