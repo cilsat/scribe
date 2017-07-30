@@ -125,27 +125,28 @@ def calc_der(lbl):
     return 1.0 - (cmat[ref, hyp].sum() / spk.dur.sum())
 
 
-def make_spk(cls, dfs, path='/home/cilsat/data/speech/rapat', min_dur=12000):
-    dfc = dfs.loc[dfs.cls == cls]
-    cum = dfc.dur.cumsum()
-    dur = cum.max()
-    if cum.max() < min_dur: print('not enough data')
-    else:
-        df = dfc.loc[:cum.loc[cum > min_dur].index[0]].copy()
-        # get start and end of segments in samples
-        times = np.dstack((df.start.values, (df.start + df.dur).values))
-        trims = ['='+str(n)+'s' for n in times.flatten()*160]
-        # write segments to file
-        old = os.path.join(path, df.file.iloc[0])
-        new = 's'+str(cls).zfill(3)
-        run(['sox', old, os.path.join(path, 'spk/'+new+'.wav'),
-            'trim'] + trims + ['gain', '-6', 'highpass', '120'],
-                stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
-        df.file = new
-        df.drop(['spkr', 'lbl'], axis=1, inplace=True)
-        df.start = np.append([0], df.dur.cumsum()[:-1].values)
-        lbl2seg(df, path=False, s='cls').to_csv(os.path.join(path, 'spk/'+new+'.seg'), sep=' ', header=None)
-        return df
+def make_spk(dfs, path='/home/cilsat/data/speech/rapat', min_dur=12000):
+    for n in dfs.cls.unique():
+        dfc = dfs.loc[dfs.cls == cls]
+        cum = dfc.dur.cumsum()
+        dur = cum.max()
+        if cum.max() < min_dur: print('not enough data')
+        else:
+            df = dfc.loc[:cum.loc[cum > min_dur].index[0]].copy()
+            # get start and end of segments in samples
+            times = np.dstack((df.start.values, (df.start + df.dur).values))
+            trims = ['='+str(n)+'s' for n in times.flatten()*160]
+            # write segments to file
+            old = os.path.join(path, df.file.iloc[0])
+            new = 's'+str(cls).zfill(3)
+            run(['sox', old, os.path.join(path, 'spk/'+new+'.wav'),
+                'trim'] + trims + ['gain', '-6', 'highpass', '120'],
+                    stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
+            df.file = new
+            df.drop(['spkr', 'lbl'], axis=1, inplace=True)
+            df.start = np.append([0], df.dur.cumsum()[:-1].values)
+            lbl2seg(df, path=False, s='cls').to_csv(os.path.join(path, 'spk/'+new+'.seg'), sep=' ', header=None)
+            return df
 
 
 def make_ubm(out, path='/home/cilsat/data/speech/rapat', min_dur=9000, min_spk=3, max_spkr=120):
