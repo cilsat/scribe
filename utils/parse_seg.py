@@ -173,6 +173,7 @@ def make_ubm(out, path='/home/cilsat/data/speech/rapat', min_dur=9000, min_spk=3
             new = 'c'+str(n).zfill(3)
             run(['sox', old, os.path.join(path, 'ubm/'+new+'.wav'), 'trim'] + trims,
                     stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
+            df['bak'] = df.file.str[:-4]
             df.file = new
             df.drop(['spkr', 'lbl'], axis=1, inplace=True)
             segs.append(df)
