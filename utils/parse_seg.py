@@ -7,6 +7,9 @@ import sys
 from datetime import timedelta
 from subprocess import run, PIPE, DEVNULL, STDOUT
 
+dsp = ['gain', '-6', 'highpass', '120']
+
+
 def seg2df(path):
     with open(path) as f:
         lines = [n for n, r in enumerate(f.read().splitlines()) if r.startswith(';;')]
@@ -44,19 +47,20 @@ def lbl2df(path, start=10, filemap=False):
 def cplay(df):
     if type(df) != pd.core.series.Series:
         for _, i in df.iterrows():
-            print(i.name, i.lbl, i.cls, i.file, i.dur*0.01)
-            run(['play', i.file, 'trim', str(i.start*0.01), str(i.dur*0.01)],
+            print(i.name, i.cls, i.file, i.dur)
+            run(['play', i.file, 'trim', str(i.start*160)+'s', str(i.dur*160)+'s'] + dsp,
                     stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
     else:
-        print(df.name, df.lbl, df.cls, df.file, df.dur*0.01)
-        run(['play', df.file, 'trim', str(df.start*0.01), str(df.dur*0.01)],
+        print(df.name, df.cls, df.file, df.dur*160)
+        run(['play', df.file, 'trim', str(df.start*160)+'s', str(df.dur*160)+'s'] + dsp,
                 stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
 
 
 def play(seg, df):
     for n, i in df.iterrows():
         print(n, i.spkr, i.start*0.01/3600, i.dur*0.01)
-        run(['play', seg, 'trim', str(i.start*0.01), str(i.dur*0.01)], stdout=DEVNULL)
+        run(['play', seg, 'trim', str(i.start*0.01), str(i.dur*0.01)] + dsp,
+                stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
 
 
 def splay(seg, df, *args):
@@ -64,21 +68,24 @@ def splay(seg, df, *args):
         play(seg, df.loc[df.spkr == spk])
 
 
-def lbl2seg(path):
-    name = path.split('.')[0]
-    df = pd.read_csv(path, delimiter=' ', index_col=0)
+def lbl2seg(name, path=True, s='lbl'):
+    if path:
+        name = name.split('.')[0]
+        df = pd.read_csv(path, delimiter=' ', index_col=0)
+    else: df = name
 
-    df.index = [name]*len(df)
+    df.index = df.file.str[:4] if 'file' in df.columns else [name]*len(df)
     gmap = {-1: 'U', 0: 'M', 1: 'F'}
-    df.gen = df.gen.map(gmap)
-    lmap = {n: 'S' + str(n) for n in df.lbl.unique()}
-    df.lbl = df.lbl.map(lmap)
+    df['gen'] = df['gen'].map(gmap)
+    fill = len(str(df[s].max()))
+    lmap = {n: 'S'+str(n).zfill(fill) for n in df[s].unique()}
+    df[s] = df[s].map(lmap).astype(str)
     df[['start', 'dur']] = df[['start', 'dur']].astype(str)
 
     df['ch'] = '1'
     df['env'] = 'S'
     df['typ'] = 'U'
-    df = df[['ch', 'start', 'dur', 'gen', 'env', 'typ', 'lbl']]
+    df = df[['ch', 'start', 'dur', 'gen', 'env', 'typ', s]]
 
     return df
 
@@ -118,7 +125,30 @@ def calc_der(lbl):
     return 1.0 - (cmat[ref, hyp].sum() / spk.dur.sum())
 
 
-def make_ubm(out, path='/home/cilsat/data/speech/rapat', min_dur=15000, min_spk=3):
+def make_spk(cls, dfs, path='/home/cilsat/data/speech/rapat', min_dur=12000):
+    dfc = dfs.loc[dfs.cls == cls]
+    cum = dfc.dur.cumsum()
+    dur = cum.max()
+    if cum.max() < min_dur: print('not enough data')
+    else:
+        df = dfc.loc[:cum.loc[cum > min_dur].index[0]].copy()
+        # get start and end of segments in samples
+        times = np.dstack((df.start.values, (df.start + df.dur).values))
+        trims = ['='+str(n)+'s' for n in times.flatten()*160]
+        # write segments to file
+        old = os.path.join(path, df.file.iloc[0])
+        new = 's'+str(cls).zfill(3)
+        run(['sox', old, os.path.join(path, 'spk/'+new+'.wav'),
+            'trim'] + trims + ['gain', '-6', 'highpass', '120'],
+                stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
+        df.file = new
+        df.drop(['spkr', 'lbl'], axis=1, inplace=True)
+        df.start = np.append([0], df.dur.cumsum()[:-1].values)
+        lbl2seg(df, path=False, s='cls').to_csv(os.path.join(path, 'spk/'+new+'.seg'), sep=' ', header=None)
+        return df
+
+
+def make_ubm(out, path='/home/cilsat/data/speech/rapat', min_dur=9000, min_spk=3, max_spkr=120):
     # concat all lbl files and make unique clusters
     dfs = lbl2df(path, 1)
     # get all clusters that are not the first min_spk speakers in each file
@@ -128,17 +158,37 @@ def make_ubm(out, path='/home/cilsat/data/speech/rapat', min_dur=15000, min_spk=
     spk = spk.loc[spk.lbl > 1]
     # find clusters that have at least min_dur seconds of speech and get them
     segs = []
+    count = 0
     for n in spk.cls.unique():
+        if count >= max_spkr: break
         dfc = spk.loc[spk.cls == n]
         cum = dfc.dur.cumsum()
         if cum.max() > min_dur:
-            df = dfc.loc[:cum.loc[cum > min_dur].index[0]]
+            df = dfc.loc[:cum.loc[cum > min_dur].index[0]].copy()
             # get start and end of segments in samples
-            trims = np.dstack((df.start.values, (df.start + df.dur).values)).flatten()*160
+            times = np.dstack((df.start.values, (df.start + df.dur).values))
+            trims = ['='+str(n)+'s' for n in times.flatten()*160]
             # write segments to file
-            run(['sox', os.path.join(path, df.file.iloc[0]), os.path.join(path, 'ubm/c'+str(n).zfill(3)+'.wav'), 'trim'] + ['='+str(n)+'s' for n in trims], stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
+            old = os.path.join(path, df.file.iloc[0])
+            new = 'c'+str(n).zfill(3)
+            run(['sox', old, os.path.join(path, 'ubm/'+new+'.wav'), 'trim'] + trims,
+                    stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
+            df.file = new
+            df.drop(['spkr', 'lbl'], axis=1, inplace=True)
+            segs.append(df)
+            count += 1
 
-    return pd.concat(segs)
+    segs = pd.concat(segs)
+    segs.start = np.append([0], segs.dur.cumsum()[:-1].values)
+    infiles = [os.path.join(path, 'ubm/'+n+'.wav') for n in segs.file.unique()]
+    cmd = ['sox'] + infiles + [os.path.join(path, 'ubm/'+out+'.wav'), 'gain', '-6', 'highpass', '120']
+    run(cmd, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
+    name = os.path.join(path, 'ubm/' + out)
+    segs.to_csv(name+'.lbl', sep=' ')
+    lbl = lbl2seg(segs, path=False, s='cls')
+    lbl.cls = 'S0'
+    lbl.to_csv(name+'.seg', sep=' ', header=None)
+    return segs
 
 
 if __name__ == "__main__":
