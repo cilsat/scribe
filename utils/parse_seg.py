@@ -59,7 +59,7 @@ def cplay(df):
 def play(seg, df):
     for n, i in df.iterrows():
         print(n, i.spkr, i.start*0.01/3600, i.dur*0.01)
-        run(['play', seg, 'trim', str(i.start*0.01), str(i.dur*0.01)] + dsp,
+        run(['play', seg, 'trim', str(i.start*160)+'s', str(i.dur*160)+'s'] + dsp,
                 stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
 
 
@@ -136,14 +136,14 @@ def write_wav(df, inpath=".", outpath="./spk"):
     trims = ["="+str(n)+"s" for n in times.flatten()*160]
     infile = os.path.join(inpath, df.src.iloc[0])
     outfile = os.path.join(outpath, df.dest.iloc[0])
-    cmd = ["sox", infile, outfile] + dsp + ["trim"] + trims
-    print(cmd)
+    cmd = ["sox", infile, outfile, "trim"] + trims + dsp
     run(cmd, stdin=PIPE, stdout=STDOUT, stderr=STDOUT)
 
 
 def make_spk(dfs, path='/home/cilsat/data/speech/rapat', min_dur=12000):
     spk = []
     for n in dfs.cls.unique():
+        if n <= 0: continue
         dfc = dfs.loc[dfs.cls == n]
         cum = dfc.dur.cumsum()
         if cum.max() < min_dur: print('not enough data for ' + str(n))
