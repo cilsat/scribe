@@ -30,7 +30,7 @@ def lbl2df(path, start=10, filemap=False):
     cls = start
     for n, i in enumerate(lbls):
         df = pd.read_csv(i, delimiter=' ', index_col=0)
-        df['src'] = [n]*len(df) if filemap else [i.replace('lbl', 'mp3')]*len(df)
+        df['src'] = [n]*len(df) if filemap else [i.replace('lbl', 'wav')]*len(df)
         cmap = {n: i + cls for i, n in enumerate(df.loc[df.lbl > 0, 'lbl'].unique())}
         for n in range(-2, 1): cmap[n] = n
         df['cls'] = df.lbl.map(cmap)
@@ -75,7 +75,7 @@ def lbl2seg(name, path=False, s='cls'):
         df = pd.read_csv(path, delimiter=' ', index_col=0)
     else: df = name
 
-    df.index = df.src.str.split('.')[0] if 'src' in df.columns else [name]*len(df)
+    df.index = df.src.str if 'src' in df.columns else [name]*len(df)
     gmap = {-1: 'U', 0: 'M', 1: 'F'}
     df['gen'] = df['gen'].map(gmap)
     fill = len(str(df[s].max()))
@@ -127,16 +127,18 @@ def calc_der(lbl):
 
 
 # df must have at least start, dur, src, and dest columns
-def write_wav(df):
+def write_wav(df, inpath=".", outpath="./spk"):
     if len(df.src.unique()) > 1 or len(df.dest.unique()) > 1:
-        print('too many input/output files')
+        print("too many input/output files")
         return
 
     times = np.dstack((df.start.values, (df.start + df.dur).values))
-    trims = ['='+str(n)+'s' for n in times.flatten()*160]
-    run(['sox', df.src.iloc[0], df.dest.iloc[0]
-        'trim'] + trims + ['gain', '-6', 'highpass', '120'],
-            stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
+    trims = ["="+str(n)+"s" for n in times.flatten()*160]
+    infile = os.path.join(inpath, df.src.iloc[0])
+    outfile = os.path.join(outpath, df.dest.iloc[0])
+    cmd = ["sox", infile, outfile] + dsp + ["trim"] + trims
+    print(cmd)
+    run(cmd, stdin=PIPE, stdout=STDOUT, stderr=STDOUT)
 
 
 def make_spk(dfs, path='/home/cilsat/data/speech/rapat', min_dur=12000):
@@ -153,9 +155,10 @@ def make_spk(dfs, path='/home/cilsat/data/speech/rapat', min_dur=12000):
             spk.append(df)
 
     spk = pd.concat(spk)
+    spk.start = np.append([0], spk.dur.cumsum()[:-1].values)
     old = spk.src.iloc[0]
     spk['src'] = old
-    new = old.split('.')[0]+'_spk'+'_'+str(min_dur/100)+'s'
+    new = old.split('.')[0]+'_spk'+'_'+str(int(min_dur/100))+'s.wav'
     spk['dest'] = new
 
     return spk
