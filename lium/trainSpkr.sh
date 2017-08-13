@@ -5,8 +5,7 @@ wav=$2
 gmmInit=$3
 gmm=$4
 ubm=$5
-
-lium="/home/cilsat/src/lium/out/artifacts/lium_jar/lium.jar"
+lium=$6
 
 #copy the ubm for each speaker
 java -cp $lium fr.lium.spkDiarization.programs.MTrainInit \
