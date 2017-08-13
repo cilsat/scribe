@@ -11,7 +11,7 @@ model_path = '/home/cilsat/src/kaldi-offline-transcriber/models'
 script_path = '/home/cilsat/dev/scribe/lium'
 
 
-def id_spk(name):
+def id_spk(name, data_path, model_path, script_path):
     testsh = os.path.join(script_path, 'speakerID.sh')
     trainsh = os.path.join(script_path, 'trainSpkr.sh')
 
@@ -44,7 +44,7 @@ def main(data, model, script):
 
 
 if __name__ == "__main__":
-    data_path = sys.argv[1]
-    model_path = sys.argv[2]
-    script_path = sys.argv[3]
+    data_path = sys.argv[1] if sys.argv[1] is not in None else data_path
+    model_path = sys.argv[2] if sys.argv[2] is not in None else model_path
+    script_path = sys.argv[3] if sys.argv[3] is not in None else script_path
     main(data_path, model_path, script_path)
