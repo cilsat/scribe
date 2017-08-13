@@ -15,7 +15,8 @@ def seg2df(path):
         lines = [n for n, r in enumerate(f.read().splitlines()) if r.startswith(';;')]
     df = pd.read_csv(path, skiprows=lines, delimiter=' ', header=None,
             usecols=[2,3,7], names=['start', 'dur', 'spkr'])
-    df.spkr = df.spkr.str[1:].astype(np.int16)
+    try: df.spkr = df.spkr.str[1:].astype(np.int16)
+    except: "cannot convert cluster names to integer"
     #f = lambda x: timedelta(seconds=x/100.)
     df[:] = df.sort_values('start').reset_index(drop=True)
     df['lbl'] = df.spkr
@@ -57,15 +58,15 @@ def cplay(df):
 
 
 def play(seg, df):
-    for n, i in df.iterrows():
-        print(n, i.spkr, i.start*0.01/3600, i.dur*0.01)
-        run(['play', seg, 'trim', str(i.start*160)+'s', str(i.dur*160)+'s'] + dsp,
+    if type(df) != pd.core.series.Series:
+        for n, i in df.iterrows():
+            print(n, i.spkr, i.lbl, i.start*0.01/3600, i.dur*0.01)
+            run(['play', seg, 'trim', str(i.start*160)+'s', str(i.dur*160)+'s'] + dsp,
+                    stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
+    else:
+        print(df.name, df.spkr, df.lbl, df.start*0.01/3600, df.dur*0.01)
+        run(['play', seg, 'trim', str(df.start*160)+'s', str(df.dur*160)+'s'] + dsp,
                 stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
-
-
-def splay(seg, df, *args):
-    for spk in args:
-        play(seg, df.loc[df.spkr == spk])
 
 
 def lbl2seg(name, path=False, s='cls'):
@@ -75,7 +76,7 @@ def lbl2seg(name, path=False, s='cls'):
         df = pd.read_csv(path, delimiter=' ', index_col=0)
     else: df = name
 
-    df.index = df.src.str if 'src' in df.columns else [name]*len(df)
+    df.index = df.src if 'src' in df.columns else [name]*len(df)
     gmap = {-1: 'U', 0: 'M', 1: 'F'}
     df['gen'] = df['gen'].map(gmap)
     fill = len(str(df[s].max()))
@@ -127,42 +128,51 @@ def calc_der(lbl):
 
 
 # df must have at least start, dur, src, and dest columns
-def write_wav(df, inpath=".", outpath="./spk"):
+def trim_wav(df, src=None, dest=None):
+    if src == None and 'src' not in df.columns:
+        print("no source file")
+        return
+    if dest == None and 'dest' not in df.columns:
+        print("no destination file")
+        return
     if len(df.src.unique()) > 1 or len(df.dest.unique()) > 1:
         print("too many input/output files")
         return
+    src = df.src.iloc[0] if 'src' in df.columns else src
+    dest = df.dest.iloc[0] if 'src' in df.columns else src
 
     times = np.dstack((df.start.values, (df.start + df.dur).values))
     trims = ["="+str(n)+"s" for n in times.flatten()*160]
-    infile = os.path.join(inpath, df.src.iloc[0])
-    outfile = os.path.join(outpath, df.dest.iloc[0])
-    cmd = ["sox", infile, outfile, "trim"] + trims + dsp
-    run(cmd, stdin=PIPE, stdout=STDOUT, stderr=STDOUT)
+    cmd = ["sox", src, dest, "trim"] + trims + dsp
+    run(cmd, stdin=PIPE)
 
 
-def make_spk(dfs, path='/home/cilsat/data/speech/rapat', min_dur=12000):
+def make_spk(dfs, out, col='cls', min_dur=9000):
     spk = []
-    for n in dfs.cls.unique():
+    for n in dfs[col].unique():
         if n <= 0: continue
-        dfc = dfs.loc[dfs.cls == n]
+        dfc = dfs.loc[dfs[col] == n]
         cum = dfc.dur.cumsum()
         if cum.max() < min_dur: print('not enough data for ' + str(n))
         else:
             df = dfc.loc[:cum.loc[cum > min_dur].index[0]].copy()
             # get start and end of segments in samples
-            df.drop(['spkr', 'lbl'], axis=1, inplace=True)
-            df.start = np.append([0], df.dur.cumsum()[:-1].values)
             spk.append(df)
 
-    spk = pd.concat(spk)
+    # segments need to be in ascending order to concatenate with sox
+    spk = pd.concat(spk).sort_index()
+    dests = spk.dest.unique()
+    for f in spk.src.unique():
+        dff = spk.loc[spk.src == f].sort_index()
+        trim_wav(dff)
+    
+    if len(dests) > 1:
+        run(['sox'] + dests + [out], stdin=PIPE, stdout=DEVNULL)
     spk.start = np.append([0], spk.dur.cumsum()[:-1].values)
-    old = spk.src.iloc[0]
-    spk['src'] = old
-    new = old.split('.')[0]+'_spk'+'_'+str(int(min_dur/100))+'s.wav'
-    spk['dest'] = new
-
+    spk.to_csv(out.replace('.wav', '.lbl'), sep=' ')
+    seg = lbl2seg(spk, s=col)
+    seg.to_csv(out.replace('.wav', '.seg'), sep=' ', header=None)
     return spk
-    #lbl2seg(df, path=False, s='cls').to_csv(os.path.join(path, 'spk/'+new+'.seg'), sep=' ', header=None)
 
 
 def make_ubm(out, path='/home/cilsat/data/speech/rapat', min_dur=9000, min_spk=3, max_spkr=120):
