@@ -10,12 +10,12 @@ from argparse import ArgumentParser
 
 
 def id_spk(name, data_path, model_path, script_path, exp_path, lium_path):
-    testsh = os.path.join(script_path, 'speakerID.sh')
     trainsh = os.path.join(script_path, 'trainSpkr.sh')
+    testsh = os.path.join(script_path, 'speakerID.sh')
 
     src = os.path.join(data_path, name + '.wav')
-    dest = os.path.join(exp_path, name + '.s.wav')
     seg = os.path.join(data_path, name + '.seg')
+    dest = os.path.join(exp_path, name + '.s.wav')
     sseg = os.path.join(exp_path, name + '.s.seg')
 
     ubm = os.path.join(model_path, 'ubm.gmm')
@@ -33,23 +33,25 @@ def id_spk(name, data_path, model_path, script_path, exp_path, lium_path):
     # run speaker identification
     run(['bash', testsh, src, seg, gmm, iseg, ubm, lium_path], stdin=PIPE, stdout=DEVNULL)
     # calculate error rate
-    hyp = df2seg(iseg)
+    hyp = seg2df(iseg)
     hyp.lbl = hyp.lbl.str.split('#').map(lambda x: int(x[-1][1:]))
     ref['hyp'] = hyp.lbl
     ref.drop(['dest', 'spkr'], axis=1, inplace=True)
     ref.rename({'lbl':'ref'}, inplace=True)
-    err = ref.loc[(ref['ref'] > 0) & (ref['ref'] != ref['hyp'])].dur.sum()
-    print(name, err/ref.loc[ref['ref'] > 0].dur.sum())
     return ref
 
 
 def main(data, model, script, exp, lium):
-    # build speaker models and do speaker id in parallel
+    # read files and sanitize
     names = [w.split('.')[0] for w in os.listdir(data) if w.endswith('.wav')]
     args = [(n, data, model, script, exp, lium) for n in names]
+    # build speaker models and do speaker id in parallel
     with Pool(cpu_count()) as pool:
         res = pool.starmap(id_spk, args)
-    return pd.concat(res)
+    res = pd.concat(res)
+    err = res.loc[(res['ref'] > 0) & (res['ref'] != res['hyp'])].dur.sum()
+    print('Error rate: ', err/res.loc[res.ref > 0].dur.sum())
+    return res
 
 
 if __name__ == "__main__":
