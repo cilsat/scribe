@@ -12,6 +12,8 @@ from argparse import ArgumentParser
 def id_spk(name, data_path, model_path, script_path, exp_path, lium_path):
     trainsh = os.path.join(script_path, 'trainSpkr.sh')
     testsh = os.path.join(script_path, 'speakerID.sh')
+    trainlog = os.path.join(exp_path, name + '.train.log')
+    testlog = os.path.join(exp_path, name + '.test.log')
 
     src = os.path.join(data_path, name + '.wav')
     seg = os.path.join(data_path, name + '.seg')
@@ -29,16 +31,19 @@ def id_spk(name, data_path, model_path, script_path, exp_path, lium_path):
     ref['src'] = src
     ref['dest'] = dest
     make_spk(ref, dest, col='lbl')
-    run(['bash', trainsh, sseg, src, initgmm, gmm, ubm, lium_path], stdin=PIPE, stdout=DEVNULL)
+    run(['bash', trainsh, sseg, dest, initgmm, gmm, ubm, lium_path, trainlog],
+            stdin=PIPE, stdout=DEVNULL)
     # run speaker identification
-    run(['bash', testsh, src, seg, gmm, iseg, ubm, lium_path], stdin=PIPE, stdout=DEVNULL)
+    run(['bash', testsh, src, seg, gmm, iseg, ubm, lium_path, testlog],
+            stdin=PIPE, stdout=DEVNULL)
     # calculate error rate
     hyp = seg2df(iseg)
     hyp.lbl = hyp.lbl.str.split('#').map(lambda x: int(x[-1][1:]))
-    ref['hyp'] = hyp.lbl
-    ref.drop(['dest', 'spkr'], axis=1, inplace=True)
-    ref.rename({'lbl':'ref'}, inplace=True)
-    return ref
+    ref.drop(['dest', 'spkr', 'src'], axis=1, inplace=True)
+    rspkn = ref.loc[ref.lbl > 0].copy()
+    rspkn['hyp'] = hyp.loc[rspkn.index, 'lbl']
+    rspkn.to_csv(iseg.replace('.seg', '.lbl'), sep=' ')
+    return (rspkn.loc[rspkn.lbl != rspkn.hyp].dur.sum(), rspkn.dur.sum())
 
 
 def main(data, model, script, exp, lium):
@@ -47,11 +52,11 @@ def main(data, model, script, exp, lium):
     args = [(n, data, model, script, exp, lium) for n in names]
     # build speaker models and do speaker id in parallel
     with Pool(cpu_count()) as pool:
-        res = pool.starmap(id_spk, args)
-    res = pd.concat(res)
-    err = res.loc[(res['ref'] > 0) & (res['ref'] != res['hyp'])].dur.sum()
-    print('Error rate: ', err/res.loc[res.ref > 0].dur.sum())
-    return res
+        res = np.array(pool.starmap(id_spk, args))
+    print('Error rate: ', np.sum(res[:, 0]) / np.sum(res[:, 1]))
+
+    for n in zip(names, res.tolist(), (res[:,0]/res[:,1]).tolist()):
+        print(n, )
 
 
 if __name__ == "__main__":
@@ -81,4 +86,4 @@ if __name__ == "__main__":
     args = parser.parse_args()
     exp_abspath = os.path.join(data_path, args.exp_path)
     if not os.path.exists(exp_abspath): os.mkdir(exp_abspath)
-    main(args.data_path, args.model_path, args.script_path, exp_abspath, args.lium_path).to_csv(os.path.join(exp_abspath, 'res.csv'), sep=' ')
+    main(args.data_path, args.model_path, args.script_path, exp_abspath, args.lium_path)
