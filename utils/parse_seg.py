@@ -144,7 +144,7 @@ def trim_wav(df, src=None, dest=None):
     times = np.dstack((df.start.values, (df.start + df.dur).values))
     trims = ["="+str(n)+"s" for n in times.flatten()*160]
     cmd = ["sox", src, dest, "trim"] + trims + dsp
-    run(cmd, stdin=PIPE)
+    run(cmd, stdout=DEVNULL, stderr=DEVNULL)
 
 
 def make_spk(dfs, out, col='cls', min_dur=9000):

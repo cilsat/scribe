@@ -68,17 +68,36 @@ def id_spk(name, data_path, model_path, script_path, exp_path, lium_path):
     gmm = os.path.join(exp_path, name + '.s.gmm')
     iseg = os.path.join(exp_path, name + '.i.seg')
 
-    # make speaker model
+    # obtain timings and audio for speaker models
     ref = pd.read_csv(os.path.join(data_path, name + '.lbl'), delimiter=' ',
             index_col=0)
     ref['src'] = src
     ref['dest'] = dest
     make_spk(ref, dest, col='lbl')
-    run(['bash', trainsh, sseg, dest, initgmm, gmm, ubm, lium_path, trainlog],
-            stdin=PIPE, stdout=DEVNULL)
+
+    # initialize speaker models using ubm
+    cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.MTrainInit',
+            '--sInputMask='+sseg, '--fInputMask='+dest,
+            '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+            '--emInitMethod=copy', '--tInputMask='+ubm, '--tOutputMask='+initgmm,
+            name]
+    with open(trainlog, 'w') as f: m = run(cmd, stderr=f)
+
+    # train speaker models
+    cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.MTrainMAP',
+            '--sInputMask='+sseg, '--fInputMask='+dest,
+            '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+            '--tInputMask='+initgmm, '--emCtrl=1,5,0.01', '--varCtrl=0.01,10.0',
+            '--tOutputMask='+gmm, name]
+    with open(trainlog, 'a') as f: m = run(cmd, stderr=f)
+
     # run speaker identification
-    run(['bash', testsh, src, seg, gmm, iseg, ubm, lium_path, testlog],
-            stdin=PIPE, stdout=DEVNULL)
+    cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.Identification',
+            '--help', '--sInputMask='+seg, '--fInputMask='+src,
+            '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+            '--tInputMask='+gmm, '--sTop=5,'+ubm, '--sSetLabel=add', name]
+    with open(testlog, 'w') as f: m = run(cmd, stderr=f)
+
     # calculate error rate
     hyp = seg2df(iseg)
     hyp.lbl = hyp.lbl.str.split('#').map(lambda x: int(x[-1][1:]))
