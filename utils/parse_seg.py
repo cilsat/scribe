@@ -48,11 +48,11 @@ def lbl2df(path, start=10, filemap=False):
 def cplay(df):
     if type(df) != pd.core.series.Series:
         for _, i in df.iterrows():
-            print(i.name, i.cls, i.src, i.dur)
+            print(i.name, i.lbl, i.src, i.dur)
             run(['play', i.src, 'trim', str(i.start*160)+'s', str(i.dur*160)+'s'] + dsp,
                     stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
     else:
-        print(df.name, df.cls, df.src, df.dur*160)
+        print(df.name, df.lbl, df.src, df.dur*160)
         run(['play', df.src, 'trim', str(df.start*160)+'s', str(df.dur*160)+'s'] + dsp,
                 stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
 
@@ -168,8 +168,8 @@ def make_spk(dfs, out, col='cls', min_dur=9000):
     
     if len(dests) > 1:
         run(['sox'] + dests + [out], stdin=PIPE, stdout=DEVNULL)
-    spk.start = np.append([0], spk.dur.cumsum()[:-1].values)
     spk.to_csv(out.replace('.wav', '.lbl'), sep=' ')
+    spk.start = np.append([0], spk.dur.cumsum()[:-1].values)
     seg = lbl2seg(spk, s=col)
     seg.to_csv(out.replace('.wav', '.seg'), sep=' ', header=None)
     return spk

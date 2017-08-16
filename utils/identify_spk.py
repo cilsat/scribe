@@ -3,10 +3,53 @@
 import os
 import sys
 import pandas as pd
-from parse_seg import *
+from .parse_seg import *
 from multiprocessing import Pool, cpu_count
 from subprocess import run, PIPE, STDOUT, DEVNULL
 from argparse import ArgumentParser
+
+
+def main():
+    home = os.path.expanduser('~')
+    data_path = os.path.join(home, 'data/speech/rapat')
+    model_path = os.path.join(home, 'src/kaldi-offline-transcriber/models')
+    script_path = os.path.join(home, 'dev/scribe/lium')
+    exp_path = 'exp'
+    lium_path = os.path.join(home, 'Downloads/lium_spkdiarization-8.4.1.jar')
+
+    parser = ArgumentParser(description="Train speaker models using a portion \
+            of speaker data retrieved from reference files (.lbl), and test on \
+            the entire file. Calculate error rate and write to csv.")
+    parser.add_argument("--data_path", type=str, default=data_path,
+            help="Path to directory containing wavs, segs, and lbls.")
+    parser.add_argument("--model_path", type=str, default=model_path,
+            help="Path to directory containing LIUM UBM, named ubm.gmm.")
+    parser.add_argument("--script_path", type=str, default=script_path,
+            help="Path to directory containing scripts for speaker training and\
+                diarization.")
+    parser.add_argument("--exp_path", type=str, default="exp",
+            help="Path to directory storing experiment results, relative to the\
+                data_path.")
+    parser.add_argument("--lium_path", type=str, default=lium_path,
+            help="Path to LIUM jar.")
+
+    args = parser.parse_args()
+    exp_abspath = os.path.join(data_path, args.exp_path)
+    if not os.path.exists(exp_abspath): os.mkdir(exp_abspath)
+    multiple(args.data_path, args.model_path, args.script_path, exp_abspath, args.lium_path)
+
+
+def multiple(data, model, script, exp, lium):
+    # read files and sanitize
+    names = [w.split('.')[0] for w in os.listdir(data) if w.endswith('.wav')]
+    args = [(n, data, model, script, exp, lium) for n in names]
+    # build speaker models and do speaker id in parallel
+    with Pool(cpu_count()) as pool:
+        res = np.array(pool.starmap(id_spk, args))
+    print('Error rate: ', np.sum(res[:, 0]) / np.sum(res[:, 1]))
+
+    for n in zip(names, res.tolist(), (res[:,0]/res[:,1]).tolist()):
+        print(n)
 
 
 def id_spk(name, data_path, model_path, script_path, exp_path, lium_path):
@@ -46,44 +89,5 @@ def id_spk(name, data_path, model_path, script_path, exp_path, lium_path):
     return (rspkn.loc[rspkn.lbl != rspkn.hyp].dur.sum(), rspkn.dur.sum())
 
 
-def main(data, model, script, exp, lium):
-    # read files and sanitize
-    names = [w.split('.')[0] for w in os.listdir(data) if w.endswith('.wav')]
-    args = [(n, data, model, script, exp, lium) for n in names]
-    # build speaker models and do speaker id in parallel
-    with Pool(cpu_count()) as pool:
-        res = np.array(pool.starmap(id_spk, args))
-    print('Error rate: ', np.sum(res[:, 0]) / np.sum(res[:, 1]))
-
-    for n in zip(names, res.tolist(), (res[:,0]/res[:,1]).tolist()):
-        print(n, )
-
-
 if __name__ == "__main__":
-    home = os.path.expanduser('~')
-    data_path = os.path.join(home, 'data/speech/rapat')
-    model_path = os.path.join(home, 'src/kaldi-offline-transcriber/models')
-    script_path = os.path.join(home, 'dev/scribe/lium')
-    exp_path = 'exp'
-    lium_path = os.path.join(home, 'Downloads/lium_spkdiarization-8.4.1.jar')
-
-    parser = ArgumentParser(description="Train speaker models using a portion \
-            of speaker data retrieved from reference files (.lbl), and test on \
-            the entire file. Calculate error rate and write to csv.")
-    parser.add_argument("--data_path", type=str, default=data_path,
-            help="Path to directory containing wavs, segs, and lbls.")
-    parser.add_argument("--model_path", type=str, default=model_path,
-            help="Path to directory containing LIUM UBM, named ubm.gmm.")
-    parser.add_argument("--script_path", type=str, default=script_path,
-            help="Path to directory containing scripts for speaker training and\
-                diarization.")
-    parser.add_argument("--exp_path", type=str, default="exp",
-            help="Path to directory storing experiment results, relative to the\
-                data_path.")
-    parser.add_argument("--lium_path", type=str, default=lium_path,
-            help="Path to LIUM jar.")
-
-    args = parser.parse_args()
-    exp_abspath = os.path.join(data_path, args.exp_path)
-    if not os.path.exists(exp_abspath): os.mkdir(exp_abspath)
-    main(args.data_path, args.model_path, args.script_path, exp_abspath, args.lium_path)
+    main()
