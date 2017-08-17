@@ -153,7 +153,7 @@ def make_spk(dfs, out, col='cls', min_dur=9000):
         if n <= 0: continue
         dfc = dfs.loc[dfs[col] == n]
         cum = dfc.dur.cumsum()
-        if cum.max() < min_dur: print('not enough data for ' + str(n))
+        #if cum.max() < min_dur: print('not enough data for ' + str(n))
         else:
             df = dfc.loc[:cum.loc[cum > min_dur].index[0]].copy()
             # get start and end of segments in samples

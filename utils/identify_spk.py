@@ -3,7 +3,7 @@
 import os
 import sys
 import pandas as pd
-from .parse_seg import *
+from parse_seg import *
 from multiprocessing import Pool, cpu_count
 from subprocess import run, PIPE, STDOUT, DEVNULL
 from argparse import ArgumentParser
@@ -14,7 +14,7 @@ def main():
     data_path = os.path.join(home, 'data/speech/rapat')
     model_path = os.path.join(home, 'src/kaldi-offline-transcriber/models')
     script_path = os.path.join(home, 'dev/scribe/lium')
-    exp_path = 'exp'
+    exp_path = os.path.join(data_path, 'exp')
     lium_path = os.path.join(home, 'Downloads/lium_spkdiarization-8.4.1.jar')
 
     parser = ArgumentParser(description="Train speaker models using a portion \
@@ -34,9 +34,8 @@ def main():
             help="Path to LIUM jar.")
 
     args = parser.parse_args()
-    exp_abspath = os.path.join(data_path, args.exp_path)
-    if not os.path.exists(exp_abspath): os.mkdir(exp_abspath)
-    multiple(args.data_path, args.model_path, args.script_path, exp_abspath, args.lium_path)
+    if not os.path.exists(args.exp_path): os.mkdir(args.exp_path)
+    multiple(args.data_path, args.model_path, args.script_path, args.exp_path, args.lium_path)
 
 
 def multiple(data, model, script, exp, lium):
@@ -93,7 +92,7 @@ def id_spk(name, data_path, model_path, script_path, exp_path, lium_path):
 
     # run speaker identification
     cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.Identification',
-            '--help', '--sInputMask='+seg, '--fInputMask='+src,
+            '--help', '--sInputMask='+seg, '--fInputMask='+src, '--sOutputMask='+iseg,
             '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
             '--tInputMask='+gmm, '--sTop=5,'+ubm, '--sSetLabel=add', name]
     with open(testlog, 'w') as f: m = run(cmd, stderr=f)
