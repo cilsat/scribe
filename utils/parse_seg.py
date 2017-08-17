@@ -154,22 +154,23 @@ def make_spk(dfs, out, col='cls', min_dur=9000):
         dfc = dfs.loc[dfs[col] == n]
         cum = dfc.dur.cumsum()
         #if cum.max() < min_dur: print('not enough data for ' + str(n))
-        else:
+        if cum.max() >= min_dur:
             df = dfc.loc[:cum.loc[cum > min_dur].index[0]].copy()
             # get start and end of segments in samples
             spk.append(df)
 
     # segments need to be in ascending order to concatenate with sox
     spk = pd.concat(spk).sort_index()
-    dests = spk.dest.unique()
-    for f in spk.src.unique():
-        dff = spk.loc[spk.src == f].sort_index()
-        trim_wav(dff)
-    
-    if len(dests) > 1:
+    srcs = spk.src.unique()
+    if len(srcs) > 1:
+        for f in srcs:
+            dff = spk.loc[spk.src == f].sort_index()
+            trim_wav(dff)
+        dests = spk.dest.unique()
         run(['sox'] + dests + [out], stdin=PIPE, stdout=DEVNULL)
+        spk.start = np.append([0], spk.dur.cumsum()[:-1].values)
+
     spk.to_csv(out.replace('.wav', '.lbl'), sep=' ')
-    spk.start = np.append([0], spk.dur.cumsum()[:-1].values)
     seg = lbl2seg(spk, s=col)
     seg.to_csv(out.replace('.wav', '.seg'), sep=' ', header=None)
     return spk

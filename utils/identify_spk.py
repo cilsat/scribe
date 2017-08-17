@@ -71,36 +71,37 @@ def id_spk(name, data_path, model_path, script_path, exp_path, lium_path):
     ref = pd.read_csv(os.path.join(data_path, name + '.lbl'), delimiter=' ',
             index_col=0)
     ref['src'] = src
-    ref['dest'] = dest
-    make_spk(ref, dest, col='lbl')
+    #ref['dest'] = dest
+    make_spk(ref, dest, col='lbl', min_dur=9000)
 
     # initialize speaker models using ubm
-    cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.MTrainInit',
-            '--sInputMask='+sseg, '--fInputMask='+dest,
+    init_cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.MTrainInit',
+            '--sInputMask='+sseg, '--fInputMask='+src,
             '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
             '--emInitMethod=copy', '--tInputMask='+ubm, '--tOutputMask='+initgmm,
             name]
-    with open(trainlog, 'w') as f: m = run(cmd, stderr=f)
 
     # train speaker models
-    cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.MTrainMAP',
-            '--sInputMask='+sseg, '--fInputMask='+dest,
+    train_cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.MTrainMAP',
+            '--sInputMask='+sseg, '--fInputMask='+src,
             '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
             '--tInputMask='+initgmm, '--emCtrl=1,5,0.01', '--varCtrl=0.01,10.0',
             '--tOutputMask='+gmm, name]
-    with open(trainlog, 'a') as f: m = run(cmd, stderr=f)
 
     # run speaker identification
-    cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.Identification',
+    test_cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.Identification',
             '--help', '--sInputMask='+seg, '--fInputMask='+src, '--sOutputMask='+iseg,
             '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
             '--tInputMask='+gmm, '--sTop=5,'+ubm, '--sSetLabel=add', name]
-    with open(testlog, 'w') as f: m = run(cmd, stderr=f)
+
+    with open(trainlog, 'w') as f: m = run(init_cmd, stderr=f)
+    with open(trainlog, 'a') as f: m = run(train_cmd, stderr=f)
+    with open(testlog, 'w') as f: m = run(test_cmd, stderr=f)
 
     # calculate error rate
     hyp = seg2df(iseg)
     hyp.lbl = hyp.lbl.str.split('#').map(lambda x: int(x[-1][1:]))
-    ref.drop(['dest', 'spkr', 'src'], axis=1, inplace=True)
+    ref.drop(['spkr', 'src'], axis=1, inplace=True)
     rspkn = ref.loc[ref.lbl > 0].copy()
     rspkn['hyp'] = hyp.loc[rspkn.index, 'lbl']
     rspkn.to_csv(iseg.replace('.seg', '.lbl'), sep=' ')
