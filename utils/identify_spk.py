@@ -3,7 +3,8 @@
 import os
 import sys
 import pandas as pd
-from parse_seg import *
+import numpy as np
+from lium_utils import seg2df, lbl2seg, make_spk
 from multiprocessing import Pool, cpu_count
 from subprocess import run, PIPE, STDOUT, DEVNULL
 from argparse import ArgumentParser
@@ -12,8 +13,7 @@ from argparse import ArgumentParser
 def main():
     home = os.path.expanduser('~')
     data_path = os.path.join(home, 'data/speech/rapat')
-    model_path = os.path.join(home, 'src/kaldi-offline-transcriber/models')
-    script_path = os.path.join(home, 'dev/scribe/lium')
+    ubm_path = os.path.join(home, 'src/kaldi-offline-transcriber/models/ubm.gmm')
     exp_path = os.path.join(data_path, 'exp')
     lium_path = os.path.join(home, 'Downloads/lium_spkdiarization-8.4.1.jar')
 
@@ -22,11 +22,8 @@ def main():
             the entire file. Calculate error rate and write to csv.")
     parser.add_argument("--data_path", type=str, default=data_path,
             help="Path to directory containing wavs, segs, and lbls.")
-    parser.add_argument("--model_path", type=str, default=model_path,
-            help="Path to directory containing LIUM UBM, named ubm.gmm.")
-    parser.add_argument("--script_path", type=str, default=script_path,
-            help="Path to directory containing scripts for speaker training and\
-                diarization.")
+    parser.add_argument("--ubm_path", type=str, default=ubm_path,
+            help="Path LIUM UBM.")
     parser.add_argument("--exp_path", type=str, default="exp",
             help="Path to directory storing experiment results, relative to the\
                 data_path.")
@@ -35,44 +32,47 @@ def main():
 
     args = parser.parse_args()
     if not os.path.exists(args.exp_path): os.mkdir(args.exp_path)
-    multiple(args.data_path, args.model_path, args.script_path, args.exp_path, args.lium_path)
+    res = multiple(args.data_path, args.ubm_path, args.exp_path, args.lium_path)
+    print(res)
+    res.to_csv(os.path.join(args.exp_path, 'res.csv'), delimiter=' ')
 
 
-def multiple(data, model, script, exp, lium):
+def multiple(data, ubm, exp, lium):
     # read files and sanitize
     names = [w.split('.')[0] for w in os.listdir(data) if w.endswith('.wav')]
-    args = [(n, data, model, script, exp, lium) for n in names]
+    args = [(n, data, ubm, exp, lium) for n in names]
     # build speaker models and do speaker id in parallel
     with Pool(cpu_count()) as pool:
         res = np.array(pool.starmap(id_spk, args))
-    print('Error rate: ', np.sum(res[:, 0]) / np.sum(res[:, 1]))
-
-    for n in zip(names, res.tolist(), (res[:,0]/res[:,1]).tolist()):
-        print(n)
+    df = pd.DataFrame(res, columns=['err', 'dur'], index=names)
+    return df
 
 
-def id_spk(name, data_path, model_path, script_path, exp_path, lium_path):
-    trainsh = os.path.join(script_path, 'trainSpkr.sh')
-    testsh = os.path.join(script_path, 'speakerID.sh')
-    trainlog = os.path.join(exp_path, name + '.train.log')
-    testlog = os.path.join(exp_path, name + '.test.log')
+def id_spk(name, data_path, ubm_path, exp_path, lium_path):
+    log = os.path.join(exp_path, name + '.t.log')
 
     src = os.path.join(data_path, name + '.wav')
-    seg = os.path.join(data_path, name + '.seg')
     dest = os.path.join(exp_path, name + '.s.wav')
     sseg = os.path.join(exp_path, name + '.s.seg')
+    slbl = os.path.join(exp_path, name + '.s.lbl')
+    ubm = ubm_path
 
-    ubm = os.path.join(model_path, 'ubm.gmm')
     initgmm = os.path.join(exp_path, name + '.s.init.gmm')
     gmm = os.path.join(exp_path, name + '.s.gmm')
     iseg = os.path.join(exp_path, name + '.i.seg')
+    tseg = os.path.join(exp_path, name + '.t.seg')
 
     # obtain timings and audio for speaker models
     ref = pd.read_csv(os.path.join(data_path, name + '.lbl'), delimiter=' ',
             index_col=0)
     ref['src'] = src
-    #ref['dest'] = dest
-    make_spk(ref, dest, col='lbl', min_dur=9000)
+    spk = make_spk(ref, dest)
+    spk.to_csv(slbl, sep=' ')
+    seg = lbl2seg(spk)
+    seg.to_csv(sseg, sep=' ', header=None)
+    non = ref.loc[(ref.lbl > 0) & (~ref.index.isin(spk.index))].copy()
+    non = lbl2seg(non)
+    non.to_csv(tseg, sep=' ', header=None)
 
     # initialize speaker models using ubm
     init_cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.MTrainInit',
@@ -90,13 +90,13 @@ def id_spk(name, data_path, model_path, script_path, exp_path, lium_path):
 
     # run speaker identification
     test_cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.Identification',
-            '--help', '--sInputMask='+seg, '--fInputMask='+src, '--sOutputMask='+iseg,
+            '--help', '--sInputMask='+tseg, '--fInputMask='+src, '--sOutputMask='+iseg,
             '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
             '--tInputMask='+gmm, '--sTop=5,'+ubm, '--sSetLabel=add', name]
 
-    with open(trainlog, 'w') as f: m = run(init_cmd, stderr=f)
-    with open(trainlog, 'a') as f: m = run(train_cmd, stderr=f)
-    with open(testlog, 'w') as f: m = run(test_cmd, stderr=f)
+    with open(log, 'w') as f: m = run(init_cmd, stderr=f)
+    with open(log, 'a') as f: m = run(train_cmd, stderr=f)
+    with open(log, 'a') as f: m = run(test_cmd, stderr=f)
 
     # calculate error rate
     hyp = seg2df(iseg)
