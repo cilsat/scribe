@@ -74,7 +74,7 @@ def lbl2seg(name, path=False, s='lbl'):
     if path:
         name = name.split('.')[0]
         df = pd.read_csv(path, delimiter=' ', index_col=0)
-    else: df = name
+    else: df = name.copy()
 
     df.index = df.src if 'src' in df.columns else [name]*len(df)
     gmap = {-1: 'U', 0: 'M', 1: 'F'}
@@ -169,6 +169,7 @@ def make_spk(dfs, out=None, col='lbl', min_dur=12000):
         dests = spk.dest.unique().tolist()
         run(['sox'] + dests + [out])
         spk.start = np.append([0], spk.dur.cumsum()[:-1].values)
+        for d in dests: os.remove(d)
 
     return spk
 
