@@ -25,7 +25,7 @@ def seg2df(path):
 
 
 def lbl2df(path, start=10, filemap=False):
-    lbls = [n for n in os.listdir(path) if n.endswith('.lbl')]
+    lbls = [os.path.join(path, n) for n in os.listdir(path) if n.endswith('.lbl')]
     lbls.sort()
     dfs = []
     cls = start
@@ -144,7 +144,7 @@ def trim_wav(df, src=None, dest=None):
     times = np.dstack((df.start.values, (df.start + df.dur).values))
     trims = ["="+str(n)+"s" for n in times.flatten()*160]
     cmd = ["sox", src, dest, "trim"] + trims + dsp
-    run(cmd, stdout=DEVNULL, stderr=DEVNULL)
+    run(cmd)
 
 
 def make_spk(dfs, out=None, col='lbl', min_dur=12000):
@@ -166,8 +166,8 @@ def make_spk(dfs, out=None, col='lbl', min_dur=12000):
         for f in srcs:
             dff = spk.loc[spk.src == f].sort_index()
             trim_wav(dff)
-        dests = spk.dest.unique()
-        run(['sox'] + dests + [out], stdin=PIPE, stdout=DEVNULL)
+        dests = spk.dest.unique().tolist()
+        run(['sox'] + dests + [out])
         spk.start = np.append([0], spk.dur.cumsum()[:-1].values)
 
     return spk

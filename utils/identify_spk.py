@@ -59,6 +59,30 @@ def multiple(data, ubm, exp, lium, stage):
     return df
 
 
+def all(data, ubm, exp, lium, stage):
+    name = 'spk'
+    dfs = lbl2df(data, 1)
+    dfs['dest'] = dfs.src.str.replace(data, exp)
+    spk = make_spk(dfs.loc[dfs.lbl > 0], out=os.path.join(exp, name+'.wav'))
+
+    sseg = os.path.join(exp, name+'.s.seg')
+    igmm = os.path.join(exp, name+'.init.gmm')
+    gmm = os.path.join(exp, name+'.gmm')
+
+    # initialize speaker models using ubm
+    init_cmd = ['java', '-cp', lium, 'fr.lium.spkDiarization.programs.MTrainInit',
+            '--sInputMask='+sseg, '--fInputMask='+src,
+            '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+            '--emInitMethod=copy', '--tInputMask='+ubm, '--tOutputMask='+initgmm,
+            name]
+
+    # train speaker models
+    train_cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.MTrainMAP',
+            '--sInputMask='+sseg, '--fInputMask='+src,
+            '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+            '--tInputMask='+initgmm, '--emCtrl=1,5,0.01', '--varCtrl=0.01,10.0',
+            '--tOutputMask='+gmm, name]
+
 def id_spk(name, data_path, ubm_path, exp_path, lium_path, stage):
     # names and paths
     log = os.path.join(exp_path, name + '.t.log')
@@ -78,7 +102,7 @@ def id_spk(name, data_path, ubm_path, exp_path, lium_path, stage):
         ref = pd.read_csv(os.path.join(data_path, name + '.lbl'), delimiter=' ',
                 index_col=0)
         ref['src'] = src
-        spk = make_spk(ref, dest)
+        spk = make_spk(ref, dest, min_dur=7500)
         ref = ref.loc[(ref.lbl > 0) & (~ref.index.isin(spk.index))].reset_index(drop=True)
 
         spk.to_csv(slbl, sep=' ')
