@@ -2,6 +2,7 @@
 """
 Split input stream into files on silence.
 """
+import os
 import sys
 import argparse
 import tempfile
@@ -59,18 +60,21 @@ def main():
     file_input()
 
 
-def file_input():
-    info = sf.info(args.in_file)
+def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
+               in_file=args.in_file, out_dir=args.out_dir,
+               blocksize=args.blocksize):
+    info = sf.info(in_file)
+    base = os.path.basename(in_file).split('.')[0]
 
     sil = True
     sil_sum = 0
     # number of silent blocks to tolerate before splitting
-    split_thr = int(args.samplerate * args.split_thr / (1000 * args.blocksize))
+    split_thr = int(info.samplerate * split_thr / (1000 * blocksize))
     # energy cutoff
-    energy_thr = 10**(0.1 * args.energy_thr)
+    energy_thr = 10**(0.1 * energy_thr)
 
     buf = []
-    for block in sf.blocks(args.in_file, blocksize=args.blocksize):
+    for n, block in enumerate(sf.blocks(in_file, blocksize=blocksize)):
         rms = np.sqrt(np.mean(block**2))
         if rms < energy_thr:
             sil_sum += 1
@@ -84,8 +88,11 @@ def file_input():
 
             if sil_sum > split_thr:
                 print(len(buf))
-                fd, name = mkstemp(suffix='.wav', dir=args.out_dir)
-                sf.write(name, buf, samplerate=info.samplerate,
+                name = base + '-' + \
+                    str(n - int(len(buf) / blocksize)).zfill(6) + \
+                    '-' + str(n).zfill(6) + '.wav'
+                sf.write(os.path.join(out_dir, name), buf,
+                         samplerate=info.samplerate,
                          subtype=info.subtype, format=info.format)
                 buf = []
         else:
