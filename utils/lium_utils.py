@@ -1,39 +1,45 @@
 #!/usr/bin/env python
 
-import pandas as pd
-import numpy as np
 import os
 import sys
-from datetime import timedelta
 from subprocess import run, PIPE, DEVNULL, STDOUT
+import pandas as pd
+import numpy as np
 
 dsp = ['gain', '-6', 'highpass', '120']
 
 
 def seg2df(path):
     with open(path) as f:
-        lines = [n for n, r in enumerate(f.read().splitlines()) if r.startswith(';;')]
+        lines = [n for n, r in enumerate(
+            f.read().splitlines()) if r.startswith(';;')]
     df = pd.read_csv(path, skiprows=lines, delimiter=' ', header=None,
-            usecols=[2,3,7], names=['start', 'dur', 'spkr'])
-    try: df.spkr = df.spkr.str[1:].astype(np.int16)
-    except: "cannot convert cluster names to integer"
+                     usecols=[2, 3, 7], names=['start', 'dur', 'spkr'])
+    try:
+        df.spkr = df.spkr.str[1:].astype(np.int16)
+    except Exception as e:
+        "cannot convert cluster names to integer"
     #f = lambda x: timedelta(seconds=x/100.)
     df[:] = df.sort_values('start').reset_index(drop=True)
     df['lbl'] = df.spkr
-    df['gen'] = [0]*len(df)
+    df['gen'] = [0] * len(df)
     return df
 
 
 def lbl2df(path, start=10, filemap=False):
-    lbls = [os.path.join(path, n) for n in os.listdir(path) if n.endswith('.lbl')]
+    lbls = [os.path.join(path, n)
+            for n in os.listdir(path) if n.endswith('.lbl')]
     lbls.sort()
     dfs = []
     cls = start
     for n, i in enumerate(lbls):
         df = pd.read_csv(i, delimiter=' ', index_col=0)
-        df['src'] = [n]*len(df) if filemap else [i.replace('lbl', 'wav')]*len(df)
-        cmap = {n: i + cls for i, n in enumerate(df.loc[df.lbl > 0, 'lbl'].unique())}
-        for n in range(-2, 1): cmap[n] = n
+        df['src'] = [n] * \
+            len(df) if filemap else [i.replace('lbl', 'wav')] * len(df)
+        cmap = {n: i + cls for i,
+                n in enumerate(df.loc[df.lbl > 0, 'lbl'].unique())}
+        for n in range(-2, 1):
+            cmap[n] = n
         df['cls'] = df.lbl.map(cmap)
         cls += len(cmap)
         dfs.append(df)
@@ -49,24 +55,24 @@ def cplay(df):
     if type(df) != pd.core.series.Series:
         for _, i in df.iterrows():
             print(i.name, i.lbl, i.src, i.dur)
-            run(['play', i.src, 'trim', str(i.start*160)+'s', str(i.dur*160)+'s'] + dsp,
-                    stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
-    else:
-        print(df.name, df.lbl, df.src, df.dur*160)
-        run(['play', df.src, 'trim', str(df.start*160)+'s', str(df.dur*160)+'s'] + dsp,
+            run(['play', i.src, 'trim', str(i.start * 160) + 's', str(i.dur * 160) + 's'] + dsp,
                 stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
+    else:
+        print(df.name, df.lbl, df.src, df.dur * 160)
+        run(['play', df.src, 'trim', str(df.start * 160) + 's', str(df.dur * 160) + 's'] + dsp,
+            stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL, start_new_session=True)
 
 
 def play(seg, df):
     if type(df) != pd.core.series.Series:
         for n, i in df.iterrows():
-            print(n, i.spkr, i.lbl, i.start*0.01/3600, i.dur*0.01)
-            run(['play', seg, 'trim', str(i.start*160)+'s', str(i.dur*160)+'s'] + dsp,
-                    stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
-    else:
-        print(df.name, df.spkr, df.lbl, df.start*0.01/3600, df.dur*0.01)
-        run(['play', seg, 'trim', str(df.start*160)+'s', str(df.dur*160)+'s'] + dsp,
+            print(n, i.spkr, i.lbl, i.start * 0.01 / 3600, i.dur * 0.01)
+            run(['play', seg, 'trim', str(i.start * 160) + 's', str(i.dur * 160) + 's'] + dsp,
                 stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
+    else:
+        print(df.name, df.spkr, df.lbl, df.start * 0.01 / 3600, df.dur * 0.01)
+        run(['play', seg, 'trim', str(df.start * 160) + 's', str(df.dur * 160) + 's'] + dsp,
+            stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
 
 
 def lbl2seg(name, path=False, s='lbl'):
@@ -74,13 +80,14 @@ def lbl2seg(name, path=False, s='lbl'):
     if path:
         name = name.split('.')[0]
         df = pd.read_csv(path, delimiter=' ', index_col=0)
-    else: df = name.copy()
+    else:
+        df = name.copy()
 
-    df.index = df.src if 'src' in df.columns else [name]*len(df)
+    df.index = df.src if 'src' in df.columns else [name] * len(df)
     gmap = {-1: 'U', 0: 'M', 1: 'F'}
     df['gen'] = df['gen'].map(gmap)
     fill = len(str(df[s].max()))
-    lmap = {n: 'S'+str(n).zfill(fill) for n in df[s].unique()}
+    lmap = {n: 'S' + str(n).zfill(fill) for n in df[s].unique()}
     df[s] = df[s].map(lmap).astype(str)
     df[['start', 'dur']] = df[['start', 'dur']].astype(str)
 
@@ -101,7 +108,8 @@ def calc_der(lbl):
     # excluded from the speaker mapping.
     sp = np.sort(lbl.lbl.unique())
     lmap = {n: i for i, n in enumerate(sp[sp > -2])}
-    for n in range(-2, 0): lmap[n] = n
+    for n in range(-2, 0):
+        lmap[n] = n
     smap = {n: i for i, n in enumerate(lbl.spkr.unique())}
 
     lbl['ref'] = lbl.lbl.map(lmap)
@@ -121,7 +129,7 @@ def calc_der(lbl):
     # matching in bipartite graphs. as linear sum assignment calculates the
     # minimum, we must first inverse the costs after adding a small non-zero
     # value to avoid division by zero.
-    ref, hyp = lsa(1./(cmat + 0.1))
+    ref, hyp = lsa(1. / (cmat + 0.1))
 
     # calculate diarization error rate (not including overlapping segments)
     return 1.0 - (cmat[ref, hyp].sum() / spk.dur.sum())
@@ -129,10 +137,10 @@ def calc_der(lbl):
 
 # df must have at least start, dur, src, and dest columns
 def trim_wav(df, src=None, dest=None):
-    if src == None and 'src' not in df.columns:
+    if src is None and 'src' not in df.columns:
         print("no source file")
         return
-    if dest == None and 'dest' not in df.columns:
+    if dest is None and 'dest' not in df.columns:
         print("no destination file")
         return
     if len(df.src.unique()) > 1 or len(df.dest.unique()) > 1:
@@ -142,7 +150,7 @@ def trim_wav(df, src=None, dest=None):
     dest = df.dest.iloc[0] if 'src' in df.columns else src
 
     times = np.dstack((df.start.values, (df.start + df.dur).values))
-    trims = ["="+str(n)+"s" for n in times.flatten()*160]
+    trims = ["=" + str(n) + "s" for n in times.flatten() * 160]
     cmd = ["sox", src, dest, "trim"] + trims + dsp
     run(cmd)
 
@@ -150,7 +158,8 @@ def trim_wav(df, src=None, dest=None):
 def make_spk(dfs, out=None, col='lbl', min_dur=12000):
     spk = []
     for n in dfs[col].unique():
-        if n <= 0: continue
+        if n <= 0:
+            continue
         dfc = dfs.loc[dfs[col] == n]
         cum = dfc.dur.cumsum()
         #if cum.max() < min_dur: print('not enough data for ' + str(n))
@@ -169,7 +178,8 @@ def make_spk(dfs, out=None, col='lbl', min_dur=12000):
         dests = spk.dest.unique().tolist()
         run(['sox'] + dests + [out])
         spk.start = np.append([0], spk.dur.cumsum()[:-1].values)
-        for d in dests: os.remove(d)
+        for d in dests:
+            os.remove(d)
 
     return spk
 
@@ -180,25 +190,27 @@ def make_ubm(out, path='/home/cilsat/data/speech/rapat', min_dur=9000, min_spk=3
     # get all clusters that are not the first min_spk speakers in each file
     # the assumption here is that the first min_spk speakers are repeated across
     # meetings
-    spk = dfs.loc[dfs.groupby(dfs.src).apply(lambda x: x.loc[x.lbl.isin(x.lbl.unique()[min_spk:])]).index.get_level_values(1)]
+    spk = dfs.loc[dfs.groupby(dfs.src).apply(lambda x: x.loc[x.lbl.isin(
+        x.lbl.unique()[min_spk:])]).index.get_level_values(1)]
     spk = spk.loc[spk.lbl > 1]
     # find clusters that have at least min_dur seconds of speech and get them
     segs = []
     count = 0
     for n in spk.cls.unique():
-        if count >= max_spkr: break
+        if count >= max_spkr:
+            break
         dfc = spk.loc[spk.cls == n]
         cum = dfc.dur.cumsum()
         if cum.max() > min_dur:
             df = dfc.loc[:cum.loc[cum > min_dur].index[0]].copy()
             # get start and end of segments in samples
             times = np.dstack((df.start.values, (df.start + df.dur).values))
-            trims = ['='+str(n)+'s' for n in times.flatten()*160]
+            trims = ['=' + str(n) + 's' for n in times.flatten() * 160]
             # write segments to file
             old = os.path.join(path, df.src.iloc[0])
-            new = 'c'+str(n).zfill(3)
-            run(['sox', old, os.path.join(path, 'ubm/'+new+'.wav'), 'trim'] + trims,
-                    stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
+            new = 'c' + str(n).zfill(3)
+            run(['sox', old, os.path.join(path, 'ubm/' + new + '.wav'), 'trim'] + trims,
+                stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
             df['src'] = df.src.str[:-4]
             df['dest'] = new
             df.drop(['spkr', 'lbl'], axis=1, inplace=True)
@@ -207,14 +219,17 @@ def make_ubm(out, path='/home/cilsat/data/speech/rapat', min_dur=9000, min_spk=3
 
     segs = pd.concat(segs)
     segs.start = np.append([0], segs.dur.cumsum()[:-1].values)
-    infiles = [os.path.join(path, 'ubm/'+n+'.wav') for n in segs.src.unique()]
-    cmd = ['sox'] + infiles + [os.path.join(path, 'ubm/'+out+'.wav'), 'gain', '-6', 'highpass', '120']
+    infiles = [os.path.join(path, 'ubm/' + n + '.wav')
+               for n in segs.src.unique()]
+    cmd = ['sox'] + infiles + \
+        [os.path.join(path, 'ubm/' + out + '.wav'),
+         'gain', '-6', 'highpass', '120']
     run(cmd, stdin=PIPE, stdout=DEVNULL, stderr=DEVNULL)
     name = os.path.join(path, 'ubm/' + out)
-    segs.to_csv(name+'.lbl', sep=' ')
+    segs.to_csv(name + '.lbl', sep=' ')
     lbl = lbl2seg(segs, path=False, s='cls')
     lbl.cls = 'S0'
-    lbl.to_csv(name+'.seg', sep=' ', header=None)
+    lbl.to_csv(name + '.seg', sep=' ', header=None)
     return segs
 
 
