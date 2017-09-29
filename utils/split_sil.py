@@ -65,6 +65,7 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
                blocksize=args.blocksize):
     info = sf.info(in_file)
     base = os.path.basename(in_file).split('.')[0]
+    samplerate = info.samplerate
 
     sil = True
     sil_sum = 0
@@ -87,13 +88,14 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
                 buf.extend(block)
 
             if sil_sum > split_thr:
-                print(len(buf))
-                name = base + '-' + \
-                    str(n - int(len(buf) / blocksize)).zfill(6) + \
-                    '-' + str(n).zfill(6) + '.wav'
+                buf_l = int(100 * len(buf) / samplerate)
+                print(buf_l)
+                name = base + '_' + \
+                    str(int(100 * blocksize * n / samplerate) - buf_l).zfill(9) \
+                    + '_' + str(buf_l).zfill(4) + '.wav'
                 sf.write(os.path.join(out_dir, name), buf,
-                         samplerate=info.samplerate,
-                         subtype=info.subtype, format=info.format)
+                         samplerate=samplerate, subtype=info.subtype,
+                         format=info.format)
                 buf = []
         else:
             if sil:
