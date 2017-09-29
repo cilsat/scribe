@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 
-import pandas as pd
-import numpy as np
 import os
 import sys
-from datetime import timedelta
 from subprocess import run, PIPE, DEVNULL, STDOUT
+import pandas as pd
+import numpy as np
 
 dsp = ['gain', '-6', 'highpass', '120']
 
@@ -18,7 +17,7 @@ def seg2df(path):
                      usecols=[2, 3, 7], names=['start', 'dur', 'spkr'])
     try:
         df.spkr = df.spkr.str[1:].astype(np.int16)
-    except:
+    except Exception as e:
         "cannot convert cluster names to integer"
     #f = lambda x: timedelta(seconds=x/100.)
     df[:] = df.sort_values('start').reset_index(drop=True)
@@ -138,10 +137,10 @@ def calc_der(lbl):
 
 # df must have at least start, dur, src, and dest columns
 def trim_wav(df, src=None, dest=None):
-    if src == None and 'src' not in df.columns:
+    if src is None and 'src' not in df.columns:
         print("no source file")
         return
-    if dest == None and 'dest' not in df.columns:
+    if dest is None and 'dest' not in df.columns:
         print("no destination file")
         return
     if len(df.src.unique()) > 1 or len(df.dest.unique()) > 1:
