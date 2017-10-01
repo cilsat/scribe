@@ -11,6 +11,7 @@ import sounddevice as sd
 import soundfile as sf
 import numpy as np
 from threading import Thread
+import pandas as pd
 from tempfile import mkstemp
 
 
@@ -66,6 +67,7 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
                blocksize=args.blocksize):
     info = sf.info(in_file)
     base = os.path.basename(in_file).split('.')[0]
+    samplerate = info.samplerate
 
     sil = True
     sil_sum = 0
@@ -75,6 +77,8 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
     energy_thr = 10**(0.1 * energy_thr)
 
     buf = []
+    end = []
+    dur = []
     for n, block in enumerate(sf.blocks(in_file, blocksize=blocksize)):
         rms = np.sqrt(np.mean(block**2))
         if rms < energy_thr:
@@ -88,13 +92,14 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
                 buf.extend(block)
 
             if sil_sum > split_thr:
-                print(len(buf))
-                name = base + '-' + \
-                    str(n - int(len(buf) / blocksize)).zfill(6) + \
-                    '-' + str(n).zfill(6) + '.wav'
+                buf_l = int(100 * len(buf) / samplerate)
+                print(buf_l)
+                name = base + '_' + \
+                    str(int(100 * blocksize * n / samplerate) - buf_l).zfill(6) \
+                    + '_' + str(buf_l).zfill(3) + '.wav'
                 sf.write(os.path.join(out_dir, name), buf,
-                         samplerate=info.samplerate,
-                         subtype=info.subtype, format=info.format)
+                         samplerate=samplerate, subtype=info.subtype,
+                         format=info.format)
                 buf = []
         else:
             if sil:
