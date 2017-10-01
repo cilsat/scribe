@@ -10,6 +10,7 @@ import queue
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
+from threading import Thread
 from tempfile import mkstemp
 
 
@@ -56,8 +57,8 @@ def main():
         print(sd.query_devices())
         parser.exit(0)
 
-    # stream()
-    file_input()
+    stream_input()
+    # file_input()
 
 
 def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
@@ -126,7 +127,6 @@ def stream_input():
                 block = block_q.get()
                 rms = np.sqrt(np.mean(block**2))
 
-                print(not sil, sil_sum, rms, len(buf))
                 if rms < energy_thr:
                     sil_sum += 1
                     if not sil:
@@ -137,10 +137,10 @@ def stream_input():
                         buf.extend(block)
 
                     if sil_sum > split_thr:
-                        print(np.array(buf))
                         fd, name = mkstemp(suffix='.wav', dir=args.out_dir)
                         sf.write(name, buf, samplerate=args.samplerate,
                                  subtype=args.subtype)
+                        print(name, 100 * len(buf) / args.samplerate)
                         buf = []
                 else:
                     if sil:
