@@ -10,6 +10,7 @@ import queue
 import sounddevice as sd
 import soundfile as sf
 import numpy as np
+import pandas as pd
 from tempfile import mkstemp
 
 
@@ -75,6 +76,8 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
     energy_thr = 10**(0.1 * energy_thr)
 
     buf = []
+    end = []
+    dur = []
     for n, block in enumerate(sf.blocks(in_file, blocksize=blocksize)):
         rms = np.sqrt(np.mean(block**2))
         if rms < energy_thr:
@@ -91,8 +94,8 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
                 buf_l = int(100 * len(buf) / samplerate)
                 print(buf_l)
                 name = base + '_' + \
-                    str(int(100 * blocksize * n / samplerate) - buf_l).zfill(9) \
-                    + '_' + str(buf_l).zfill(4) + '.wav'
+                    str(int(100 * blocksize * n / samplerate) - buf_l).zfill(6) \
+                    + '_' + str(buf_l).zfill(3) + '.wav'
                 sf.write(os.path.join(out_dir, name), buf,
                          samplerate=samplerate, subtype=info.subtype,
                          format=info.format)
