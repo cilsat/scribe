@@ -1,0 +1,10 @@
+{
+  "filesrc": {
+    "location": "/home/cilsat/data/speech/1.7_expr/wav/A001/A11LML001A001.wav"
+  },
+  "wavparse": {},
+  "cutter": {
+    "threshold-dB": -50.0
+  },
+  "autoaudiosink": {}
+}
