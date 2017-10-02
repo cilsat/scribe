@@ -10,7 +10,7 @@ from collections import OrderedDict
 Gst.init(None)
 
 
-class Cutter(object):
+class Pipeliner(object):
 
     def __init__(self, config):
         self.loop = GLib.MainLoop()
@@ -20,6 +20,7 @@ class Cutter(object):
 
         self.pipeline = Gst.Pipeline()
         for n, plug in enumerate(config.keys()):
+            print(plug)
             options = config[plug]
             if options:
                 for o in options.keys():
@@ -68,5 +69,5 @@ if __name__ == '__main__':
     with open(sys.argv[1]) as cfg:
         config = json.load(cfg, object_pairs_hook=OrderedDict)
 
-    c = Cutter(config)
-    c.run()
+    p = Pipeliner(config)
+    p.run()

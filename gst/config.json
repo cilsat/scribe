@@ -1,8 +1,9 @@
 {
   "filesrc": {
-    "location": "/home/cilsat/data/speech/1.7_expr/wav/A001/A11LML001A001.wav"
+    "location": "/home/cilsat/data/speech/perisalah/inti2/wav/A001/A11LML001A001.wav"
   },
   "wavparse": {},
+  "removesilence": {},
   "cutter": {
     "threshold-dB": -50.0
   },
