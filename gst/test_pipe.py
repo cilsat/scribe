@@ -30,7 +30,6 @@ def on_eos(_bus, _msg):
     ss.quit()
     loop.quit()
 
-
 def on_error(_bus, _msg):
     err, dbg = _msg.parse_error()
     print(msg.src.get_name(), err.message)
