@@ -5,31 +5,30 @@ import json
 import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
-from removesilence import RemoveSilence
+from splitsilence import SplitSilence
 
 Gst.init(None)
 loop = GLib.MainLoop()
 
 src = Gst.ElementFactory.make('filesrc', 'filesrc')
 wp = Gst.ElementFactory.make('wavparse', 'wavparse')
-rs = RemoveSilence()
+ss = SplitSilence()
 sink = Gst.ElementFactory.make('autoaudiosink', 'autoaudiosink')
 
-src.set_property(
-    'location', sys.argv[1])
+src.set_property('location', sys.argv[1])
 
 pipeline = Gst.Pipeline()
-for n in [src, wp, rs, sink]:
+for n in [src, wp, ss, sink]:
     pipeline.add(n)
 
 src.link(wp)
-wp.link(rs)
-rs.link(sink)
+wp.link(ss)
+ss.link(sink)
 
 
 def on_eos(_bus, _msg):
+    ss.quit()
     loop.quit()
-    print('EOS')
 
 
 def on_error(_bus, _msg):
