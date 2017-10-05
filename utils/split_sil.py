@@ -69,7 +69,6 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
     base = os.path.basename(in_file).split('.')[0]
     samplerate = info.samplerate
 
-    sil = True
     sil_sum = 0
     # number of silent blocks to tolerate before splitting
     split_thr = int(info.samplerate * split_thr / (1000 * blocksize))
@@ -83,9 +82,6 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
         rms = np.sqrt(np.mean(block**2))
         if rms < energy_thr:
             sil_sum += 1
-            if not sil:
-                sil = True
-
             if not buf:
                 continue
             else:
@@ -102,9 +98,7 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
                          format=info.format)
                 buf = []
         else:
-            if sil:
-                sil = False
-                sil_sum = 0
+            sil_sum = 0
             buf.extend(block)
 
 
