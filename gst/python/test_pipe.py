@@ -22,7 +22,6 @@ def test_stream():
                                    'audio/x-raw,format=S16LE,rate=16000,channels=1')
     sink = Gst.ElementFactory.make('autoaudiosink', 'autoaudiosink')
 
-    #src.set_property('location', sys.argv[1])
     caps.set_property('caps', Gst.caps_from_string(
         'audio/x-raw, rate=16000, width=16, depth=16, channels=1'))
 
