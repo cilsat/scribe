@@ -15,9 +15,10 @@ from tempfile import mkstemp
 
 import gi
 gi.require_version('GstBase', '1.0')
-
 from gi.repository import Gst, GObject, GstBase
+
 Gst.init(None)
+caps = 'audio/x-raw,format=S16LE,rate=16000,channels=1'
 
 
 class SplitSilence(GstBase.BaseTransform):
@@ -31,12 +32,12 @@ class SplitSilence(GstBase.BaseTransform):
             "src",
             Gst.PadDirection.SRC,
             Gst.PadPresence.ALWAYS,
-            Gst.caps_from_string('audio/x-raw,format=S16LE,rate=16000,channels=1')),
+            Gst.caps_from_string(caps)),
         Gst.PadTemplate.new(
             "sink",
             Gst.PadDirection.SINK,
             Gst.PadPresence.ALWAYS,
-            Gst.caps_from_string('audio/x-raw,format=S16LE,rate=16000,channels=1'))
+            Gst.caps_from_string(caps))
     )
 
     __gproperties__ = {
@@ -66,6 +67,11 @@ class SplitSilence(GstBase.BaseTransform):
     def __init__(self):
         GstBase.BaseTransform.__init__(self)
 
+        self.props = {
+            'split_thr': 3,
+            'energy_thr': -15,
+            'out_dir': './splits'
+        }
         self.samplerate = 16000
         self.blk_q = Queue()
         self.sentinel = object()
@@ -74,21 +80,20 @@ class SplitSilence(GstBase.BaseTransform):
 
     def do_set_property(self, prop, val):
         if prop.name == 'split_thr':
-            self.split_thr = val
-        elif prop.name == 'energy_thr':
-            self.energy_thr = val
-        elif prop.name == 'out_dir':
-            self.out_dir = val
+            self.props['split_thr'] = val
+        if prop.name == 'energy_thr':
+            self.props['energy_thr'] = val
+        if prop.name == 'out_dir':
+            self.props['out_dir'] = val
 
     def do_get_property(self, prop):
         val = None
         if prop.name == 'split_thr':
-            val = self.split_thr
-        elif prop.name == 'energy_thr':
-            val = self.energy_thr
-        elif prop.name == 'out_dir':
-            val = self.out_dir
-        return val
+            val = self.props['split_thr']
+        if prop.name == 'energy_thr':
+            val = self.props['energy_thr']
+        if prop.name == 'out_dir':
+            val = self.props['out_dir']
 
     def do_transform_ip(self, buf):
         # Gst.info("timestamp(buffer):%s" % (Gst.TIME_ARGS(buf.pts)))
@@ -118,9 +123,9 @@ class SplitSilence(GstBase.BaseTransform):
         # number of consecutive silent blocks detected so far
         sil_sum = 0
         # maximum sil_sum before buffer is dumped to file
-        split_thr = self.split_thr
+        split_thr = self.props['split_thr']
         # level in dB below which a block is considered silent
-        energy_thr = 10**(0.1 * self.energy_thr) * 32768
+        energy_thr = 10**(0.1 * self.props['energy_thr']) * 32768
         # directory to place split files
         out_dir = '/home/cilsat/dev/scribe/test/splits/m0002-0'
         # list to store audio buffer
