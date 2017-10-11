@@ -26,6 +26,13 @@ def seg2df(path):
     return df
 
 
+"""
+Returns dataframe of all label files in path with proper unique speaker labels.
+Usage:
+    dfs = lbl2df('/home/cilsat/data/speech/rapat', start=1)
+"""
+
+
 def lbl2df(path, start=10, filemap=False):
     lbls = [os.path.join(path, n)
             for n in os.listdir(path) if n.endswith('.lbl')]

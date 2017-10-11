@@ -213,11 +213,11 @@ def train(lium, seg, wav, ubm, igmm, gmm, name, log):
 def test(lium, seg, wav, iseg, gmm, ubm, name, log):
     # identify speaker segments
     cmd = ['java', '-cp', lium, 'fr.lium.spkDiarization.programs.Identification',
-           '--help', '--sInputMask=' + seg, '--fInputMask=' + wav, '--sOutputMask=' + iseg,
+           '--sInputMask=' + seg, '--fInputMask=' + wav, '--sOutputMask=' + iseg,
            '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
            '--tInputMask=' + gmm, '--sTop=5,' + ubm, '--sSetLabel=add', name]
 
-    with open(log, 'w') as f:
+    with open(log, 'a') as f:
         run(cmd, stderr=f)
 
 
