@@ -76,13 +76,21 @@ def main():
     names = [n.split('.')[0] for n in os.listdir(wav_path)
              if n.endswith('.lbl')]
 
+    paths = {n: os.path.join(args.out_dir, n) for n in names}
+
     for n in names:
-        path = os.path.join(args.out_dir, n)
-        # if not os.path.exists(path):
-        #    os.mkdir(path)
-        #file_input(in_file=os.path.join(wav_path, n + '.wav'), out_dir=path)
-        #lium_test(name=n, out_dir=path)
-        lium_score(name=n, out_dir=path, data_dir=wav_path)
+        if not os.path.exists(paths[n]):
+            os.mkdir(paths[n])
+
+    for n in names:
+        file_input(in_file=os.path.join(
+            wav_path, n + '.wav'), out_dir=paths[n])
+
+    for n in names:
+        lium_test(name=n, out_dir=paths[n])
+
+    for n in names:
+        lium_score(name=n, out_dir=paths[n], data_dir=wav_path)
 
 
 def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
@@ -118,7 +126,7 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
                 durs.append(dur)
                 start = 100 * mult * n - dur
                 starts.append(start)
-                name = base + '_' + str(start).zfill(fill) + '.wav'
+                name = base + '_' + str(int(start)).zfill(fill) + '.wav'
                 names.append(name)
                 sf.write(os.path.join(out_dir, name), buf,
                          samplerate=samplerate, subtype=info.subtype,
@@ -189,7 +197,7 @@ def lium_test(name, out_dir):
 
     # Use LIUM to identify speakers
     lium = '/home/cilsat/down/prog/lium_spkdiarization-8.4.1.jar'
-    gmm = '/home/cilsat/data/speech/rapat/120s_all/spk.gmm'
+    gmm = '/home/cilsat/data/speech/rapat/90s_all/spk.gmm'
     ubm = '/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm'
     log = os.path.join(out_dir, name + '.log')
     for n in df.index:
@@ -225,9 +233,14 @@ def lium_score(name, out_dir, data_dir='/home/cilsat/data/speech/rapat'):
     df = pd.read_csv(info, index_col=0)
 
     scores = []
+    rights = []
     for key, hyp in df.iterrows():
         # get last ref segment that starts before hyp starts
-        begin = ref.loc[ref.start <= hyp.start].iloc[-1]
+        try:
+            begin = ref.loc[ref.start <= hyp.start].iloc[-1]
+        except:
+            print(hyp.name)
+            begin = ref.iloc[0]
         # get first ref segment that ends after hyp ends
         try:
             end = ref.loc[ref.start + ref.dur >= hyp.start + hyp.dur].iloc[0]
@@ -249,9 +262,12 @@ def lium_score(name, out_dir, data_dir='/home/cilsat/data/speech/rapat'):
                 if ref.loc[n, 'cls'] == hyp.hyp:
                     score += ref.loc[n, 'dur']
         scores.append(score)
+        rights.append(begin.cls)
 
     df['score'] = scores
+    df['right'] = rights
     df.score = df.score.astype(int)
+    df.right = df.right.astype(int)
     df.to_csv(info)
 
 
