@@ -15,7 +15,7 @@ from tempfile import mkstemp
 
 import gi
 gi.require_version('GstBase', '1.0')
-from gi.repository import Gst, GObject, GstBase
+from gi.repository import Gst, GLib, GObject, GstBase
 
 Gst.init(None)
 caps = 'audio/x-raw,format=S16LE,rate=16000,channels=1'
@@ -45,14 +45,14 @@ class SplitSilence(GstBase.BaseTransform):
             GObject.TYPE_UINT,
             'Split Threshold',
             'Max consecutive silent blocks before gate',
-            1, GObject.G_MAXUINT, 3,  # min, max, default
+            1, 150, 3,  # min, max, default
             GObject.PARAM_READWRITE | GObject.PARAM_CONSTRUCT
         ),
         'energy_thr': (
-            GObject.TYPE_INT,
+            GObject.TYPE_FLOAT,
             'Silence Threshold',
             'Level (in dB) below which signal is considered silent',
-            GObject.G_MININT, GObject.G_MAXINT, -15,  # min, max, default
+            -60.0, 60.0, -15.0,  # min, max, default
             GObject.PARAM_READWRITE | GObject.PARAM_CONSTRUCT
         ),
         'out_dir': (
