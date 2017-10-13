@@ -1,5 +1,13 @@
 #!/usr/bin/env python
-
+"""
+Used to train and test speaker models from DPD data.
+Example usage:
+    ./identify_spk.py --data_path $HOME/data/speech/rapat \
+            --ubm_path $HOME/src/kaldi-offline-transcriber/models/ubm.gmm \
+            --lium_path $HOME/down/prog/lium_spkdiarization-8.4.1.jar
+    Trains single speaker model for all speakers obtained from *.lbl and *.wav
+    in data_path, tests speaker identification, and scores results.
+"""
 import os
 import sys
 import pandas as pd
@@ -51,8 +59,8 @@ def main():
     # res = multiple(args.data_path, args.ubm_path, args.exp_path, args.lium_path,
     #        args.duration, args.stage)
     print(res)
-    print('all: ', res.err.sum() / res.dur.sum())
-    #res.to_csv(os.path.join(args.exp_path, 'res.csv'), sep=' ')
+    # print('all: ', res.err.sum() / res.dur.sum())
+    # res.to_csv(os.path.join(args.exp_path, 'res.csv'), sep=' ')
 
 
 def multiple(data, ubm, exp, lium, dur, stage):
@@ -82,8 +90,8 @@ def id_spk(name, data_path, ubm_path, exp_path, lium_path, duration, stage):
 
     # obtain timings and audio for speaker models
     if stage < 1:
-        ref = pd.read_csv(os.path.join(data_path, name + '.lbl'), delimiter=' ',
-                          index_col=0)
+        ref = pd.read_csv(os.path.join(data_path, name + '.lbl'),
+                          delimiter=' ', index_col=0)
         ref['src'] = src
         spk = make_spk(ref, dest, min_dur=duration * 100)
         ref = ref.loc[(ref.lbl > 0) & (
@@ -96,24 +104,30 @@ def id_spk(name, data_path, ubm_path, exp_path, lium_path, duration, stage):
         non.to_csv(tseg, sep=' ', header=None)
 
     # initialize speaker models using ubm
-    init_cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.MTrainInit',
-                '--sInputMask=' + sseg, '--fInputMask=' + src,
-                '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
-                '--emInitMethod=copy', '--tInputMask=' + ubm, '--tOutputMask=' + initgmm,
-                name]
+    init_cmd = [
+        'java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.MTrainInit',
+        '--sInputMask=' + sseg, '--fInputMask=' + src,
+        '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+        '--emInitMethod=copy', '--tInputMask=' + ubm,
+        '--tOutputMask=' + initgmm, name
+    ]
 
     # train speaker models
-    train_cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.MTrainMAP',
-                 '--sInputMask=' + sseg, '--fInputMask=' + src,
-                 '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
-                 '--tInputMask=' + initgmm, '--emCtrl=1,5,0.01', '--varCtrl=0.01,10.0',
-                 '--tOutputMask=' + gmm, name]
+    train_cmd = [
+        'java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.MTrainMAP',
+        '--sInputMask=' + sseg, '--fInputMask=' + src,
+        '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+        '--tInputMask=' + initgmm, '--emCtrl=1,5,0.01', '--varCtrl=0.01,10.0',
+        '--tOutputMask=' + gmm, name
+    ]
 
     # run speaker identification
-    test_cmd = ['java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.Identification',
-                '--help', '--sInputMask=' + tseg, '--fInputMask=' + src, '--sOutputMask=' + iseg,
-                '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
-                '--tInputMask=' + gmm, '--sTop=5,' + ubm, '--sSetLabel=add', name]
+    test_cmd = [
+        'java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.Identification',
+        '--sInputMask=' + tseg, '--fInputMask=' + src, '--sOutputMask=' + iseg,
+        '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+        '--tInputMask=' + gmm, '--sTop=5,' + ubm, '--sSetLabel=add', name
+    ]
 
     if stage < 2:
         with open(log, 'w') as f:
@@ -136,6 +150,10 @@ def id_spk(name, data_path, ubm_path, exp_path, lium_path, duration, stage):
 
 
 def all(data, ubm, exp, lium, dur, stage):
+    """
+    Differs from id_spk in that the speaker model is trained from ALL
+    sessions/meetings.
+    """
     name = 'spk'
     src = os.path.join(exp, name + '.wav')
     sseg = os.path.join(exp, name + '.s.seg')
@@ -144,6 +162,11 @@ def all(data, ubm, exp, lium, dur, stage):
     gmm = os.path.join(exp, name + '.gmm')
     log = os.path.join(exp, name + '.log')
 
+    # Get speaker model timings/audio from each session.
+    # Combine all labels/references into the data required to create a single
+    # speaker model with a per speaker minimum duration of training audio.
+    # This data includes [exp]/spk.s.{seg,lbl,wav}
+    # Output test transcripts to [exp]/*.t.seg.
     if stage < 1:
         dfs = lbl2df(data, 1)
         dfs['dest'] = dfs.src.str.replace(data, exp)
@@ -184,25 +207,32 @@ def all(data, ubm, exp, lium, dur, stage):
             ref = seg2df(tseg)
             ref['hyp'] = hyp.lbl
             ref.to_csv(ilbl, sep=' ')
-            res.append((ref.loc[ref.lbl != ref.hyp].dur.sum(), ref.dur.sum()))
-        res = pd.DataFrame(res, columns=['err', 'dur'], index=names)
+            ref.index = [n] * len(ref)
+            res.append(ref)
+        res = pd.concat(res)
+        res.drop(['spkr', 'gen'], axis=1, inplace=True)
+        res.to_csv(os.path.join(exp, 'results.csv'))
         return res
 
 
 def train(lium, seg, wav, ubm, igmm, gmm, name, log):
     # initialize speaker models using ubm
-    init_cmd = ['java', '-cp', lium, 'fr.lium.spkDiarization.programs.MTrainInit',
-                '--sInputMask=' + seg, '--fInputMask=' + wav,
-                '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
-                '--emInitMethod=copy', '--tInputMask=' + ubm, '--tOutputMask=' + igmm,
-                name]
+    init_cmd = [
+        'java', '-cp', lium, 'fr.lium.spkDiarization.programs.MTrainInit',
+        '--sInputMask=' + seg, '--fInputMask=' + wav,
+        '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+        '--emInitMethod=copy', '--tInputMask=' + ubm, '--tOutputMask=' + igmm,
+        name
+    ]
 
     # train speaker models
-    train_cmd = ['java', '-cp', lium, 'fr.lium.spkDiarization.programs.MTrainMAP',
-                 '--sInputMask=' + seg, '--fInputMask=' + wav,
-                 '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
-                 '--tInputMask=' + igmm, '--emCtrl=1,5,0.01', '--varCtrl=0.01,10.0',
-                 '--tOutputMask=' + gmm, name]
+    train_cmd = [
+        'java', '-cp', lium, 'fr.lium.spkDiarization.programs.MTrainMAP',
+        '--sInputMask=' + seg, '--fInputMask=' + wav,
+        '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+        '--tInputMask=' + igmm, '--emCtrl=1,5,0.01', '--varCtrl=0.01,10.0',
+        '--tOutputMask=' + gmm, name
+    ]
 
     with open(log, 'w') as f:
         run(init_cmd, stderr=f)
@@ -212,10 +242,12 @@ def train(lium, seg, wav, ubm, igmm, gmm, name, log):
 
 def test(lium, seg, wav, iseg, gmm, ubm, name, log):
     # identify speaker segments
-    cmd = ['java', '-cp', lium, 'fr.lium.spkDiarization.programs.Identification',
-           '--sInputMask=' + seg, '--fInputMask=' + wav, '--sOutputMask=' + iseg,
-           '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
-           '--tInputMask=' + gmm, '--sTop=5,' + ubm, '--sSetLabel=add', name]
+    cmd = [
+        'java', '-cp', lium, 'fr.lium.spkDiarization.programs.Identification',
+        '--sInputMask=' + seg, '--fInputMask=' + wav, '--sOutputMask=' + iseg,
+        '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+        '--tInputMask=' + gmm, '--sTop=5,' + ubm, '--sSetLabel=add', name
+    ]
 
     with open(log, 'a') as f:
         run(cmd, stderr=f)

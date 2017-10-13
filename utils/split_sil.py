@@ -8,6 +8,7 @@ Example execution:
 Don't forget to use the correct UBM!
 Use the speaker model obtained from 120s_all
 """
+
 import os
 import sys
 import argparse
@@ -18,10 +19,10 @@ import soundfile as sf
 import numpy as np
 import pandas as pd
 from threading import Thread
-import pandas as pd
+from multiprocessing import Pool, cpu_count
 from tempfile import mkstemp
 from identify_spk import test
-from lium_utils import lbl2df
+from lium_utils import lbl2df, cplay
 
 
 def int_or_str(text):
@@ -59,10 +60,22 @@ parser.add_argument(
     '-i', '--in-file', type=str, help='path to input file')
 parser.add_argument(
     '-o', '--out-dir', type=str, help='path to directory to store splits')
+parser.add_argument(
+    '--stage', type=int, default=0,
+    help='which stage of the experiment to begin on')
+parser.add_argument(
+    '--data-path', type=str, help='Path to labels and wavs')
+parser.add_argument(
+    '--sm', type=str, help='Path to speaker model')
+parser.add_argument(
+    '--ubm', type=str, help='Path to universal background model')
+parser.add_argument(
+    '--lium', type=str, help='Path to LIUM jar')
 args = parser.parse_args()
 
 
 def main():
+    print(args)
     if args.list_devices:
         print(sd.query_devices())
         parser.exit(0)
@@ -78,19 +91,27 @@ def main():
 
     paths = {n: os.path.join(args.out_dir, n) for n in names}
 
-    for n in names:
-        if not os.path.exists(paths[n]):
-            os.mkdir(paths[n])
+    if args.stage < 2:
+        for n in names:
+            if not os.path.exists(paths[n]):
+                os.mkdir(paths[n])
+            file_input(in_file=os.path.join(
+                wav_path, n + '.wav'), out_dir=paths[n])
 
-    for n in names:
-        file_input(in_file=os.path.join(
-            wav_path, n + '.wav'), out_dir=paths[n])
+    # for n in names:
+        # lium_test(name=n, out_dir=paths[n])
 
-    for n in names:
-        lium_test(name=n, out_dir=paths[n])
+    if args.stage < 3:
+        map_args = [(n, paths[n]) for n in names]
+        with Pool(cpu_count()) as p:
+            p.starmap(lium_test, map_args)
 
-    for n in names:
-        lium_score(name=n, out_dir=paths[n], data_dir=wav_path)
+    if args.stage < 4:
+        for n in names:
+            lium_score(name=n, out_dir=paths[n], data_dir=wav_path)
+        df_all = pd.concat([pd.read_csv(os.path.join(
+            paths[n], n + '_info.csv'), index_col=0) for n in names])
+        df_all.to_csv(os.path.join(args.out_dir, 'results.csv'))
 
 
 def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
@@ -124,7 +145,7 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
             if sil_sum > split_thr:
                 dur = len(buf) * mult
                 durs.append(dur)
-                start = 100 * mult * n - dur
+                start = n * blocksize * mult - dur
                 starts.append(start)
                 name = base + '_' + str(int(start)).zfill(fill) + '.wav'
                 names.append(name)
@@ -197,7 +218,7 @@ def lium_test(name, out_dir):
 
     # Use LIUM to identify speakers
     lium = '/home/cilsat/down/prog/lium_spkdiarization-8.4.1.jar'
-    gmm = '/home/cilsat/data/speech/rapat/90s_all/spk.gmm'
+    gmm = '/home/cilsat/data/speech/rapat/120s_all_r2/spk.gmm'
     ubm = '/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm'
     log = os.path.join(out_dir, name + '.log')
     for n in df.index:
@@ -233,19 +254,19 @@ def lium_score(name, out_dir, data_dir='/home/cilsat/data/speech/rapat'):
     df = pd.read_csv(info, index_col=0)
 
     scores = []
-    rights = []
+    refs = []
     for key, hyp in df.iterrows():
         # get last ref segment that starts before hyp starts
         try:
             begin = ref.loc[ref.start <= hyp.start].iloc[-1]
-        except:
-            print(hyp.name)
+        except Exception as e:
+            print(hyp.name, e)
             begin = ref.iloc[0]
         # get first ref segment that ends after hyp ends
         try:
             end = ref.loc[ref.start + ref.dur >= hyp.start + hyp.dur].iloc[0]
-        except:
-            print(hyp.name)
+        except Exception as e:
+            print(hyp.name, e)
             end = ref.iloc[-1]
         # calculate how many frames hyp identifies correctly
         score = 0
@@ -262,13 +283,21 @@ def lium_score(name, out_dir, data_dir='/home/cilsat/data/speech/rapat'):
                 if ref.loc[n, 'cls'] == hyp.hyp:
                     score += ref.loc[n, 'dur']
         scores.append(score)
-        rights.append(begin.cls)
+        refs.append(begin.cls)
 
     df['score'] = scores
-    df['right'] = rights
+    df['ref'] = refs
     df.score = df.score.astype(int)
-    df.right = df.right.astype(int)
+    df.ref = df.ref.astype(int)
     df.to_csv(info)
+
+
+def pspk_play(results, df_spk, spk_id):
+    unq = results.loc[results.ref == spk_id, 'hyp'].unique()
+    ref = df_spk.loc[df_spk.cls.isin(unq)]
+    unk = ref.groupby(ref.cls).first()
+    unk.src = '/home/cilsat/data/speech/rapat/120s_all/spk.wav'
+    cplay(unk)
 
 
 if __name__ == '__main__':
