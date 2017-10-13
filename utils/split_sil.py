@@ -85,8 +85,7 @@ def main():
     # else:
         # file_input()
 
-    wav_path = '/home/cilsat/data/speech/rapat'
-    names = [n.split('.')[0] for n in os.listdir(wav_path)
+    names = [n.split('.')[0] for n in os.listdir(args.data_path)
              if n.endswith('.lbl')]
 
     paths = {n: os.path.join(args.out_dir, n) for n in names}
@@ -96,19 +95,19 @@ def main():
             if not os.path.exists(paths[n]):
                 os.mkdir(paths[n])
             file_input(in_file=os.path.join(
-                wav_path, n + '.wav'), out_dir=paths[n])
+                args.data_path, n + '.wav'), out_dir=paths[n])
 
     # for n in names:
         # lium_test(name=n, out_dir=paths[n])
 
     if args.stage < 3:
         map_args = [(n, paths[n]) for n in names]
-        with Pool(cpu_count()) as p:
+        with Pool(cpu_count()/2) as p:
             p.starmap(lium_test, map_args)
 
     if args.stage < 4:
         for n in names:
-            lium_score(name=n, out_dir=paths[n], data_dir=wav_path)
+            lium_score(name=n, out_dir=paths[n], data_dir=args.data_path)
         df_all = pd.concat([pd.read_csv(os.path.join(
             paths[n], n + '_info.csv'), index_col=0) for n in names])
         df_all.to_csv(os.path.join(args.out_dir, 'results.csv'))
