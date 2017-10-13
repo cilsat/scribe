@@ -99,7 +99,7 @@ def main():
 
     if args.stage < 3:
         map_args = [(n, paths[n]) for n in names]
-        with Pool(cpu_count() / 2) as p:
+        with Pool(cpu_count()) as p:
             p.starmap(lium_test, map_args)
 
     if args.stage < 4:
@@ -211,6 +211,7 @@ def stream_input():
 
 def lium_test(name, out_dir):
     info = os.path.join(out_dir, name + '_info.csv')
+    df = pd.read_csv(info, index_col=0)
 
     # Use LIUM to identify speakers
     log = os.path.join(out_dir, name + '.log')
@@ -223,7 +224,6 @@ def lium_test(name, out_dir):
              gmm=args.sm, ubm=args.ubm, name=lbl, log=log)
 
     # Get results of speaker identification and stuff them into info
-    df = pd.read_csv(info, index_col=0)
     hyp = []
     for n in df.index:
         with open(os.path.join(out_dir, n.replace('.wav', '.i.seg'))) as f:
