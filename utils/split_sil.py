@@ -97,12 +97,9 @@ def main():
             file_input(in_file=os.path.join(
                 args.data_path, n + '.wav'), out_dir=paths[n])
 
-    # for n in names:
-        # lium_test(name=n, out_dir=paths[n])
-
     if args.stage < 3:
         map_args = [(n, paths[n]) for n in names]
-        with Pool(cpu_count()/2) as p:
+        with Pool(cpu_count() / 2) as p:
             p.starmap(lium_test, map_args)
 
     if args.stage < 4:
@@ -151,7 +148,8 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
                 sf.write(os.path.join(out_dir, name), buf,
                          samplerate=samplerate, subtype=info.subtype,
                          format=info.format)
-                with open(os.path.join(out_dir, name.replace('.wav', '.uem.seg')), 'w') as f:
+                with open(os.path.join(out_dir, name.replace(
+                        '.wav', '.uem.seg')), 'w') as f:
                     f.write(name + ' 1 0 ' + str(int(dur)) + ' U U U S1')
                 buf = []
         else:
@@ -213,22 +211,19 @@ def stream_input():
 
 def lium_test(name, out_dir):
     info = os.path.join(out_dir, name + '_info.csv')
-    df = pd.read_csv(info, index_col=0)
 
     # Use LIUM to identify speakers
-    lium = '/home/cilsat/down/prog/lium_spkdiarization-8.4.1.jar'
-    gmm = '/home/cilsat/data/speech/rapat/120s_all_r2/spk.gmm'
-    ubm = '/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm'
     log = os.path.join(out_dir, name + '.log')
     for n in df.index:
         seg = os.path.join(out_dir, n.replace('.wav', '.uem.seg'))
         wav = os.path.join(out_dir, n)
         iseg = seg.replace('.uem.seg', '.i.seg')
         lbl = n.split('.')[0]
-        test(lium=lium, seg=seg, wav=wav, iseg=iseg,
-             gmm=gmm, ubm=ubm, name=lbl, log=log)
+        test(lium=args.lium, seg=seg, wav=wav, iseg=iseg,
+             gmm=args.sm, ubm=args.ubm, name=lbl, log=log)
 
     # Get results of speaker identification and stuff them into info
+    df = pd.read_csv(info, index_col=0)
     hyp = []
     for n in df.index:
         with open(os.path.join(out_dir, n.replace('.wav', '.i.seg'))) as f:
@@ -240,7 +235,7 @@ def lium_test(name, out_dir):
 
 def lium_score(name, out_dir, data_dir='/home/cilsat/data/speech/rapat'):
     """
-    Used to align output of lium_test with reference files and score accordingly
+    Align output of lium_test with reference files and score accordingly
     """
     dfs = lbl2df(data_dir, 1)
     src = os.path.join(os.path.dirname(dfs.src.iloc[0]), name + '.wav')
