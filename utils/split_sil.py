@@ -23,6 +23,7 @@ from multiprocessing import Pool, cpu_count
 from tempfile import mkstemp
 from identify_spk import test
 from lium_utils import lbl2df, cplay
+from segmentaxis import segment_axis
 
 
 def int_or_str(text):
@@ -71,6 +72,9 @@ parser.add_argument(
     '--ubm', type=str, help='Path to universal background model')
 parser.add_argument(
     '--lium', type=str, help='Path to LIUM jar')
+parser.add_argument(
+    '--ncpu', type=int, default=cpu_count(),
+    help='Number of processing cores to utilize for experiment')
 args = parser.parse_args()
 
 
@@ -85,8 +89,10 @@ def main():
     # else:
         # file_input()
 
-    names = [n.split('.')[0] for n in os.listdir(args.data_path)
-             if n.endswith('.lbl')]
+    # names = [n.split('.')[0] for n in os.listdir(args.data_path)
+        # if n.endswith('.lbl')]
+
+    names = ['m0048-0']
 
     paths = {n: os.path.join(args.out_dir, n) for n in names}
 
@@ -99,15 +105,39 @@ def main():
 
     if args.stage < 3:
         map_args = [(n, paths[n]) for n in names]
-        with Pool(cpu_count()) as p:
+        with Pool(args.ncpu) as p:
             p.starmap(lium_test, map_args)
 
     if args.stage < 4:
-        for n in names:
-            lium_score(name=n, out_dir=paths[n], data_dir=args.data_path)
+        map_args = [(n, paths[n], args.data_path) for n in names]
+        with Pool(cpu_count()) as p:
+            p.starmap(lium_score, map_args)
         df_all = pd.concat([pd.read_csv(os.path.join(
             paths[n], n + '_info.csv'), index_col=0) for n in names])
         df_all.to_csv(os.path.join(args.out_dir, 'results.csv'))
+
+    if args.stage < 5:
+        for n in names:
+            logs = [os.path.join(paths[n], l)
+                    for l in os.listdir(paths[n]) if l.endswith('.log')]
+
+            spkr = [x[5][:-1] for x in (r.split() for r in open(
+                logs[0]).readlines()[45:] if r.find('score S') > 0)]
+
+            # Pad beginning and end of parsed logs
+            pad = np.zeros((2, len(spkr)))
+            nhyp = np.vstack((pad, [lium_parse_log(l) for l in logs], pad))
+
+            # Get best hypothesis from an averaged window
+            mhyp = [spkr[w.mean(axis=0).argmax()]
+                    for w in segment_axis(nhyp, 5, 4, 0, 'cut')]
+            print(len(mhyp), len(logs))
+
+            res = pd.read_csv(os.path.join(
+                paths[n], n + '_info.csv'), index_col=0)
+            res['5-best'] = mhyp
+            res.to_csv(os.path.join(paths[n], n + '_info.csv'))
+            lium_score(n, paths[n], '5-best', args.data_path)
 
 
 def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
@@ -143,7 +173,7 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
                 durs.append(dur)
                 start = n * blocksize * mult - dur
                 starts.append(start)
-                name = base + '_' + str(int(start)).zfill(fill) + '.wav'
+                name = base + '_' + str(int(start)) + '.wav'
                 names.append(name)
                 sf.write(os.path.join(out_dir, name), buf,
                          samplerate=samplerate, subtype=info.subtype,
@@ -214,10 +244,10 @@ def lium_test(name, out_dir):
     df = pd.read_csv(info, index_col=0)
 
     # Use LIUM to identify speakers
-    log = os.path.join(out_dir, name + '.log')
     for n in df.index:
         seg = os.path.join(out_dir, n.replace('.wav', '.uem.seg'))
         wav = os.path.join(out_dir, n)
+        log = os.path.join(out_dir, n.replace('.wav', '.log'))
         iseg = seg.replace('.uem.seg', '.i.seg')
         lbl = n.split('.')[0]
         test(lium=args.lium, seg=seg, wav=wav, iseg=iseg,
@@ -229,11 +259,33 @@ def lium_test(name, out_dir):
         with open(os.path.join(out_dir, n.replace('.wav', '.i.seg'))) as f:
             hyp.append(int(f.read().split('#')[-1][1:-1]))
 
+    nhyp = np.zstack([lium_parse_log(n.replace('.wav', '.log'))
+                      for n in df.index])
+
     df['hyp'] = hyp
     df.to_csv(info)
 
 
-def lium_score(name, out_dir, data_dir='/home/cilsat/data/speech/rapat'):
+def lium_parse_log(log):
+    with open(log) as f:
+        raw = f.readlines()[45:]
+
+    # hyp = {int(x[5][1:-1]): float(x[6])
+        # for x in (r.split()
+        # for r in open(log).readlines()[45:]
+        # if r.find('score S') > 0)}
+
+    hyp = []
+    for r in raw:
+        b = r.find('score S')
+        if b > 0:
+            x = r.split()
+            hyp.append(float(x[6]))
+
+    return np.array(hyp)
+
+
+def lium_score(name, out_dir, hyp_col='hyp', data_dir='/home/cilsat/data/speech/rapat'):
     """
     Align output of lium_test with reference files and score accordingly
     """
@@ -266,12 +318,12 @@ def lium_score(name, out_dir, data_dir='/home/cilsat/data/speech/rapat'):
         score = 0
         # if all of hyp is contained within one ref segment
         if begin.name == end.name:
-            if begin.cls == hyp.hyp:
+            if begin.cls == hyp[hyp_col]:
                 score += hyp.dur
         else:
-            if begin.cls == hyp.hyp:
+            if begin.cls == hyp[hyp_col]:
                 score += begin.start + begin.dur - hyp.start
-            if end.cls == hyp.hyp:
+            if end.cls == hyp[hyp_col]:
                 score += hyp.start + hyp.dur - end.start
             for n in range(begin.name + 1, end.name):
                 if ref.loc[n, 'cls'] == hyp.hyp:
@@ -284,14 +336,6 @@ def lium_score(name, out_dir, data_dir='/home/cilsat/data/speech/rapat'):
     df.score = df.score.astype(int)
     df.ref = df.ref.astype(int)
     df.to_csv(info)
-
-
-def pspk_play(results, df_spk, spk_id):
-    unq = results.loc[results.ref == spk_id, 'hyp'].unique()
-    ref = df_spk.loc[df_spk.cls.isin(unq)]
-    unk = ref.groupby(ref.cls).first()
-    unk.src = '/home/cilsat/data/speech/rapat/120s_all/spk.wav'
-    cplay(unk)
 
 
 if __name__ == '__main__':
