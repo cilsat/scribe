@@ -8,6 +8,7 @@ Example execution:
 Don't forget to use the correct UBM!
 Use the speaker model obtained from 120s_all
 """
+
 import os
 import sys
 import argparse
@@ -18,10 +19,11 @@ import soundfile as sf
 import numpy as np
 import pandas as pd
 from threading import Thread
-import pandas as pd
+from multiprocessing import Pool, cpu_count
 from tempfile import mkstemp
 from identify_spk import test
-from lium_utils import lbl2df
+from lium_utils import lbl2df, cplay
+from segmentaxis import segment_axis
 
 
 def int_or_str(text):
@@ -59,10 +61,25 @@ parser.add_argument(
     '-i', '--in-file', type=str, help='path to input file')
 parser.add_argument(
     '-o', '--out-dir', type=str, help='path to directory to store splits')
+parser.add_argument(
+    '--stage', type=int, default=0,
+    help='which stage of the experiment to begin on')
+parser.add_argument(
+    '--data-path', type=str, help='Path to labels and wavs')
+parser.add_argument(
+    '--sm', type=str, help='Path to speaker model')
+parser.add_argument(
+    '--ubm', type=str, help='Path to universal background model')
+parser.add_argument(
+    '--lium', type=str, help='Path to LIUM jar')
+parser.add_argument(
+    '--ncpu', type=int, default=cpu_count(),
+    help='Number of processing cores to utilize for experiment')
 args = parser.parse_args()
 
 
 def main():
+    print(args)
     if args.list_devices:
         print(sd.query_devices())
         parser.exit(0)
@@ -72,25 +89,55 @@ def main():
     # else:
         # file_input()
 
-    wav_path = '/home/cilsat/data/speech/rapat'
-    names = [n.split('.')[0] for n in os.listdir(wav_path)
-             if n.endswith('.lbl')]
+    # names = [n.split('.')[0] for n in os.listdir(args.data_path)
+        # if n.endswith('.lbl')]
+
+    names = ['m0048-0']
 
     paths = {n: os.path.join(args.out_dir, n) for n in names}
 
-    for n in names:
-        if not os.path.exists(paths[n]):
-            os.mkdir(paths[n])
+    if args.stage < 2:
+        for n in names:
+            if not os.path.exists(paths[n]):
+                os.mkdir(paths[n])
+            file_input(in_file=os.path.join(
+                args.data_path, n + '.wav'), out_dir=paths[n])
 
-    for n in names:
-        file_input(in_file=os.path.join(
-            wav_path, n + '.wav'), out_dir=paths[n])
+    if args.stage < 3:
+        map_args = [(n, paths[n]) for n in names]
+        with Pool(args.ncpu) as p:
+            p.starmap(lium_test, map_args)
 
-    for n in names:
-        lium_test(name=n, out_dir=paths[n])
+    if args.stage < 4:
+        map_args = [(n, paths[n], args.data_path) for n in names]
+        with Pool(cpu_count()) as p:
+            p.starmap(lium_score, map_args)
+        df_all = pd.concat([pd.read_csv(os.path.join(
+            paths[n], n + '_info.csv'), index_col=0) for n in names])
+        df_all.to_csv(os.path.join(args.out_dir, 'results.csv'))
 
-    for n in names:
-        lium_score(name=n, out_dir=paths[n], data_dir=wav_path)
+    if args.stage < 5:
+        for n in names:
+            logs = [os.path.join(paths[n], l)
+                    for l in os.listdir(paths[n]) if l.endswith('.log')]
+
+            spkr = [x[5][:-1] for x in (r.split() for r in open(
+                logs[0]).readlines()[45:] if r.find('score S') > 0)]
+
+            # Pad beginning and end of parsed logs
+            pad = np.zeros((2, len(spkr)))
+            nhyp = np.vstack((pad, [lium_parse_log(l) for l in logs], pad))
+
+            # Get best hypothesis from an averaged window
+            mhyp = [spkr[w.mean(axis=0).argmax()]
+                    for w in segment_axis(nhyp, 5, 4, 0, 'cut')]
+            print(len(mhyp), len(logs))
+
+            res = pd.read_csv(os.path.join(
+                paths[n], n + '_info.csv'), index_col=0)
+            res['5-best'] = mhyp
+            res.to_csv(os.path.join(paths[n], n + '_info.csv'))
+            lium_score(n, paths[n], '5-best', args.data_path)
 
 
 def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
@@ -124,9 +171,9 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
             if sil_sum > split_thr:
                 dur = len(buf) * mult
                 durs.append(dur)
-                start = 100 * mult * n - dur
+                start = n * blocksize * mult - dur
                 starts.append(start)
-                name = base + '_' + str(int(start)).zfill(fill) + '.wav'
+                name = base + '_' + str(int(start)) + '.wav'
                 names.append(name)
                 sf.write(os.path.join(out_dir, name), buf,
                          samplerate=samplerate, subtype=info.subtype,
@@ -197,17 +244,14 @@ def lium_test(name, out_dir):
     df = pd.read_csv(info, index_col=0)
 
     # Use LIUM to identify speakers
-    lium = '/home/cilsat/down/prog/lium_spkdiarization-8.4.1.jar'
-    gmm = '/home/cilsat/data/speech/rapat/90s_all/spk.gmm'
-    ubm = '/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm'
-    log = os.path.join(out_dir, name + '.log')
     for n in df.index:
         seg = os.path.join(out_dir, n.replace('.wav', '.uem.seg'))
         wav = os.path.join(out_dir, n)
+        log = os.path.join(out_dir, n.replace('.wav', '.log'))
         iseg = seg.replace('.uem.seg', '.i.seg')
         lbl = n.split('.')[0]
-        test(lium=lium, seg=seg, wav=wav, iseg=iseg,
-             gmm=gmm, ubm=ubm, name=lbl, log=log)
+        test(lium=args.lium, seg=seg, wav=wav, iseg=iseg,
+             gmm=args.sm, ubm=args.ubm, name=lbl, log=log)
 
     # Get results of speaker identification and stuff them into info
     hyp = []
@@ -215,11 +259,33 @@ def lium_test(name, out_dir):
         with open(os.path.join(out_dir, n.replace('.wav', '.i.seg'))) as f:
             hyp.append(int(f.read().split('#')[-1][1:-1]))
 
+    nhyp = np.zstack([lium_parse_log(n.replace('.wav', '.log'))
+                      for n in df.index])
+
     df['hyp'] = hyp
     df.to_csv(info)
 
 
-def lium_score(name, out_dir, data_dir='/home/cilsat/data/speech/rapat'):
+def lium_parse_log(log):
+    with open(log) as f:
+        raw = f.readlines()[45:]
+
+    # hyp = {int(x[5][1:-1]): float(x[6])
+        # for x in (r.split()
+        # for r in open(log).readlines()[45:]
+        # if r.find('score S') > 0)}
+
+    hyp = []
+    for r in raw:
+        b = r.find('score S')
+        if b > 0:
+            x = r.split()
+            hyp.append(float(x[6]))
+
+    return np.array(hyp)
+
+
+def lium_score(name, out_dir, hyp_col='hyp', data_dir='/home/cilsat/data/speech/rapat'):
     """
     Align output of lium_test with reference files and score accordingly
     """
@@ -234,41 +300,41 @@ def lium_score(name, out_dir, data_dir='/home/cilsat/data/speech/rapat'):
     df = pd.read_csv(info, index_col=0)
 
     scores = []
-    rights = []
+    refs = []
     for key, hyp in df.iterrows():
         # get last ref segment that starts before hyp starts
         try:
             begin = ref.loc[ref.start <= hyp.start].iloc[-1]
         except Exception as e:
-            print(hyp.name)
+            print(hyp.name, e)
             begin = ref.iloc[0]
         # get first ref segment that ends after hyp ends
         try:
             end = ref.loc[ref.start + ref.dur >= hyp.start + hyp.dur].iloc[0]
         except Exception as e:
-            print(hyp.name)
+            print(hyp.name, e)
             end = ref.iloc[-1]
         # calculate how many frames hyp identifies correctly
         score = 0
         # if all of hyp is contained within one ref segment
         if begin.name == end.name:
-            if begin.cls == hyp.hyp:
+            if begin.cls == hyp[hyp_col]:
                 score += hyp.dur
         else:
-            if begin.cls == hyp.hyp:
+            if begin.cls == hyp[hyp_col]:
                 score += begin.start + begin.dur - hyp.start
-            if end.cls == hyp.hyp:
+            if end.cls == hyp[hyp_col]:
                 score += hyp.start + hyp.dur - end.start
             for n in range(begin.name + 1, end.name):
                 if ref.loc[n, 'cls'] == hyp.hyp:
                     score += ref.loc[n, 'dur']
         scores.append(score)
-        rights.append(begin.cls)
+        refs.append(begin.cls)
 
     df['score'] = scores
-    df['right'] = rights
+    df['ref'] = refs
     df.score = df.score.astype(int)
-    df.right = df.right.astype(int)
+    df.ref = df.ref.astype(int)
     df.to_csv(info)
 
 
