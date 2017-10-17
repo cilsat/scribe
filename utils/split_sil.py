@@ -131,7 +131,8 @@ def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
                 sf.write(os.path.join(out_dir, name), buf,
                          samplerate=samplerate, subtype=info.subtype,
                          format=info.format)
-                with open(os.path.join(out_dir, name.replace('.wav', '.uem.seg')), 'w') as f:
+                with open(os.path.join(out_dir, name.replace(
+                        '.wav', '.uem.seg')), 'w') as f:
                     f.write(name + ' 1 0 ' + str(int(dur)) + ' U U U S1')
                 buf = []
         else:
@@ -220,7 +221,7 @@ def lium_test(name, out_dir):
 
 def lium_score(name, out_dir, data_dir='/home/cilsat/data/speech/rapat'):
     """
-    Used to align output of lium_test with reference files and score accordingly
+    Align output of lium_test with reference files and score accordingly
     """
     dfs = lbl2df(data_dir, 1)
     src = os.path.join(os.path.dirname(dfs.src.iloc[0]), name + '.wav')
@@ -238,13 +239,13 @@ def lium_score(name, out_dir, data_dir='/home/cilsat/data/speech/rapat'):
         # get last ref segment that starts before hyp starts
         try:
             begin = ref.loc[ref.start <= hyp.start].iloc[-1]
-        except:
+        except Exception as e:
             print(hyp.name)
             begin = ref.iloc[0]
         # get first ref segment that ends after hyp ends
         try:
             end = ref.loc[ref.start + ref.dur >= hyp.start + hyp.dur].iloc[0]
-        except:
+        except Exception as e:
             print(hyp.name)
             end = ref.iloc[-1]
         # calculate how many frames hyp identifies correctly
