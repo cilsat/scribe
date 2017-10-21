@@ -75,6 +75,9 @@ parser.add_argument(
 parser.add_argument(
     '--ncpu', type=int, default=cpu_count(),
     help='Number of processing cores to utilize for experiment')
+parser.add_argument(
+    '--win-size', type=int, default=3,
+    help='Window size for maximum average window method')
 args = parser.parse_args()
 
 
@@ -117,11 +120,12 @@ def main():
         df_all.to_csv(os.path.join(args.out_dir, 'results.csv'))
 
     if args.stage > 3:
-        maw_args = [(n, paths[n]) for n in names]
+        maw_args = [(n, paths[n], args.win_size) for n in names]
         with Pool(cpu_count()) as p:
             dfs = p.starmap(lium_maw, maw_args)
         df_maw = pd.concat(dfs)
-        df_maw.to_csv(os.path.join(args.out_dir, 'maw.csv'))
+        df_maw.to_csv(os.path.join(
+            args.out_dir, str(args.win_size) + '-maw.csv'))
 
 
 def file_input(split_thr=args.split_thr, energy_thr=args.energy_thr,
@@ -243,9 +247,6 @@ def lium_test(name, out_dir):
         with open(os.path.join(out_dir, n.replace('.wav', '.i.seg'))) as f:
             hyp.append(int(f.read().split('#')[-1][1:-1]))
 
-    nhyp = np.zstack([lium_parse_log(n.replace('.wav', '.log'))
-                      for n in df.index])
-
     df['hyp'] = hyp
     df.to_csv(info)
 
@@ -309,7 +310,7 @@ def lium_score(name, out_dir, out_res=False, hyp_col='hyp',
 
 def lium_parse_log(log):
     with open(log) as f:
-        raw = f.readlines()[45:]
+        raw = f.read().split('Picked up _JAVA_OPTIONS')[-1].splitlines()[45:]
 
     # hyp = {int(x[5][1:-1]): float(x[6])
         # for x in (r.split()
@@ -326,40 +327,39 @@ def lium_parse_log(log):
     return np.array(hyp)
 
 
-def lium_maw(name, out_dir, window_size=3):
-    logs = [os.path.join(out_dir, l)
-            for l in os.listdir(out_dir) if l.endswith('.log')]
+def lium_maw(name, out_dir, win_size=3):
+    df = pd.read_csv(os.path.join(out_dir, name + '_info.csv'), index_col=0)
+    logs = [os.path.join(out_dir, l.replace('wav', 'log')) for l in df.index]
 
-    spkr = [int(x[5][1:-1]) for x in (r.split() for r in open(
-        logs[0]).readlines()[45:] if r.find('score S') > 0)]
+    # Determine speakers from testing log files
+    with open(logs[0]) as f:
+        raw = f.read().split('Picked up _JAVA_OPTIONS')[-1].splitlines()[45:]
+    spkr = [int(x[5][1:-1])
+            for x in (r.split()
+                      for r in raw if r.find('score S') > 0)]
+
+    # Parse logs to obtain id scores for all speakers
+    spk_scores = np.vstack([lium_parse_log(l) for l in logs])
+    dfspk = pd.concat(
+        (df, pd.DataFrame(spk_scores, columns=['S' + str(s) for s in spkr], index=df.index)), axis=1)
+    dfspk.to_csv(os.path.join(out_dir, name + '_full.csv'))
 
     # Pad beginning and end of parsed logs
-    start = np.array([int(n.split('_')[-1])
-                      for n in (os.path.basename(l).replace('.log', '') for l in logs)])
-    spk_scores = np.vstack([lium_parse_log(l) for l in logs])[start.argsort()]
-    pad = np.zeros((int(window_size / 2), len(spkr)))
-    nhyp = np.vstack((pad, spk_scores, pad))
-
-    dfspk = pd.DataFrame(spk_scores, columns=spkr)
-    dfspk['start'] = np.sort(start)
-    dfspk.to_csv(os.path.join(out_dir, name + '_scores.csv'))
+    pad = np.zeros((int(win_size / 2), len(spkr)))
+    dur = df.dur.values.reshape((len(df.dur), 1))
+    nhyp = np.vstack((pad, spk_scores * dur, pad))
 
     # Get best hypothesis from an averaged window
     mhyp = [spkr[w.mean(axis=0).argmax()]
-            for w in segment_axis(nhyp, window_size, window_size - 1, 0, 'cut')]
-    # mhyp = []
-    # for w in segment_axis(nhyp, window_size, window_size - 1, 0, 'cut'):
-    # m = w.mean(axis=0)
-    # idx = spkr[m.argmax()]
-    # print(m.argmax(), idx)
-    # mhyp.append(idx)
+            for w in segment_axis(nhyp, win_size, win_size - 1, 0, 'cut')]
 
     res = pd.read_csv(os.path.join(
         out_dir, name + '_info.csv'), index_col=0)
-    res['5-best'] = mhyp
+    res['maw'] = mhyp
+    res.drop('5-best', axis=1, inplace=True)
     res.to_csv(os.path.join(out_dir, name + '_info.csv'))
     return lium_score(name, out_dir, out_res=True,
-                      hyp_col='5-best', data_dir=args.data_path)
+                      hyp_col='maw', data_dir=args.data_path)
 
 
 if __name__ == '__main__':
