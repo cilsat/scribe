@@ -341,13 +341,15 @@ def lium_maw(name, out_dir, win_size=3):
     # Parse logs to obtain id scores for all speakers
     spk_scores = np.vstack([lium_parse_log(l) for l in logs])
     dfspk = pd.concat(
-        (df, pd.DataFrame(spk_scores, columns=['S' + str(s) for s in spkr], index=df.index)), axis=1)
+        (df, pd.DataFrame(
+            spk_scores,
+            columns=['S' + str(s) for s in spkr], index=df.index)), axis=1)
     dfspk.to_csv(os.path.join(out_dir, name + '_full.csv'))
 
     # Pad beginning and end of parsed logs
-    pad = np.zeros((int(win_size / 2), len(spkr)))
-    dur = df.dur.values.reshape((len(df.dur), 1))
-    nhyp = np.vstack((pad, spk_scores * dur, pad))
+    pad = np.zeros(((win_size - 1), len(spkr)))
+    dur = 0.1 * df.dur.values.reshape((len(df.dur), 1))
+    nhyp = np.vstack((pad, spk_scores * dur))
 
     # Get best hypothesis from an averaged window
     mhyp = [spkr[w.mean(axis=0).argmax()]

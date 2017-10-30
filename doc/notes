@@ -1,0 +1,68 @@
+0. Abstract
+
+1. Background
+
+2. Literature
+
+3. Data
+Data was taken from audio recordings of the meetings of the Indonesian Regional
+Representation Council (Dewan Perwakilan Daerah Republik Indonesia) throughout
+2014 and 2015. These recordings were provided by PT Inti, an Indonesian
+telecommunication state company, with whom we have jointly developed portions
+of the Perisalah speech recognition system *ref. A total of 57 separate meetings
+were recorded during this time period, 30 of which were chosen for this
+research.
+
+These meetings, which are open to the public, are held by members of the
+Regional Representation Council (DPD) to discuss various national concerns
+related to the passing of new laws. The official function of the council is to
+act as a legaslative control mechanism; when an issue is raised, the council is
+responsible for deliberating and studying the issue at hand and producing a
+document containing recommendations and insights. The other legislative
+branches are obligated to consider this document when passing laws pertaining
+to these issues. In addition to their primary function, the council is also
+occasionally called upon to resolve conflicts between regional stakeholders
+and the government. Hence, the subject matter and structure of the meetings
+can generally be classified into one of the following topics:
+1. Expert consultation sessions. Experts in relevant fields are called upon to
+assess the current status of the issue being discussed and are asked to present
+their topic of expertise. These meetings will typically consist of one or more
+experts presenting their topics uninterrupted, before concluding with a
+question and answering session.
+2. Discussing recommendations. These meetings are typically heavily moderated
+discussion sessions, whereby the moderator goes through the prepared document
+in sections and calls upon the relevant teams for clarification, before opening
+discussion to the floor for that section. Although still relatively structured
+due to the moderation, these meetings can at times produce portions of
+overlapping speech.
+3. Conflict resolution. This involves a hearing between two sides in a conflict
+usually regarding settlements related to land rights. The two sides are called
+upon to make statements regarding the issue before the council, after which
+the council will discuss the issue.
+4. Miscellaneous. These are usually meetings to discuss internal matters, for
+instance with regards to scheduling future meetings, deadlines, diplomatic
+visits to various regions, et cetera.
+
+The varied conditions of these meetings with regards to speaker participation
+are presented in *table.
+
+The raw audio recordings were first analyzed to determine the total duration of
+speech they contained, as meetings were often preceded, succeeded, and
+occasionally punctured by long stretches of silence. 
+
+Due to the lack of metadata and large number of speakers, an iterative approach
+was taken whereby 
+
+
+3.1 Pre-processing
+
+
+3.2 Labeling
+
+4. Experiment
+4.1 Baseline
+4.2 Proposed
+
+5. Results
+
+6. Conclusion
