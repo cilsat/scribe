@@ -1,6 +1,9 @@
 0. Abstract
 
 1. Background
+- try to steer towards real life usage of systems instead of 'artificial'
+evaluation metrices.
+-
 
 2. Literature
 
@@ -48,10 +51,10 @@ are presented in *table.
 
 The raw audio recordings were first analyzed to determine the total duration of
 speech they contained, as meetings were often preceded, succeeded, and
-occasionally punctured by long stretches of silence. 
+occasionally punctured by long stretches of silence.
 
 Due to the lack of metadata and large number of speakers, an iterative approach
-was taken whereby 
+was taken whereby
 
 
 3.1 Pre-processing
