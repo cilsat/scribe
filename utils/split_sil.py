@@ -290,8 +290,10 @@ def lium_score(name, out_dir, out_res=False, hyp_col='hyp',
         else:
             if begin.cls == hyp[hyp_col]:
                 score += begin.start + begin.dur - hyp.start
+                refs.append(begin.cls)
             if end.cls == hyp[hyp_col]:
                 score += hyp.start + hyp.dur - end.start
+                refs.append(end.cls)
             for n in range(begin.name + 1, end.name):
                 if ref.loc[n, 'cls'] == hyp.hyp:
                     score += ref.loc[n, 'dur']
