@@ -5,7 +5,10 @@
 evaluation metrices.
 -
 
+Diarization error rate (DER) is calculated as the per frame
+
 2. Literature
+
 
 3. Data
 Data was taken from audio recordings of the meetings of the Indonesian Regional
@@ -46,24 +49,84 @@ the council will discuss the issue.
 instance with regards to scheduling future meetings, deadlines, diplomatic
 visits to various regions, et cetera.
 
-The varied conditions of these meetings with regards to speaker participation
-are presented in *table.
-
-The raw audio recordings were first analyzed to determine the total duration of
-speech they contained, as meetings were often preceded, succeeded, and
-occasionally punctured by long stretches of silence.
-
-Due to the lack of metadata and large number of speakers, an iterative approach
-was taken whereby
+An overview of the meetings is presented in *table.
 
 
 3.1 Pre-processing
 
+Raw recordings were first converted to 16 kHz 16-bit WAV audio for ease of
+storage and access. In the process, the audio was high pass filtered at
+100 Hz to reduce low frequency noises such as rumbling and pops. In addition,
+loudness leveling was applied per recording to ensure equal average loudness
+between meetings and to prevent clipping of the signal. In particular,
+loudness leveling is important if signal level/energy is an audio feature. The
+audio recordings were then analyzed to determine the total duration of
+speech they contained, as meetings were often preceded, succeeded, and
+occasionally punctured by long stretches of silence.
+
+Each meeting was subsequently analyzed to determine when speaker changes
+occurred, known variously as speaker change detection, speaker turn
+identification, and speaker segmentation. In an offline setting, this typically
+consists of the following steps in most speech diarization systems:
+1. Divide audio into frames.
+2. First pass using BL.
+3. Second pass using KL2.
+In practice, speaker segmentation mostly succeeds in guaranteeing individual
+segments contain at most one speaker, but fails to ensure consecutive segments
+belong to different speakers.
+
+This process is typically followed by hierarchical clustering of speakers
+based on information dervied from the resulting speaker segments. In an offline
+setting, this is achieved via the following steps:
+1. Train a GMM for each speaker segment
+2. Specify a difference metric as the basis for clustering
+3. Cluster segments hierarchically using difference threshold as reference
+
+In this way, we generate an initial prediction of the speaker segment
+boundaries and their speaker labels for each meeting.
+
 
 3.2 Labeling
 
+Each segment in each meeting was labeled manually to obtain speaker labels and
+genders. For the purposes of this research, speaker segment boundaries were
+not corrected. Instead, segments with overlapping speaker were marked and
+ommited from training and testing, and hence do not contribute to the final
+error rate. As such, it is assumed that the segment boundaries derived from
+the speaker segmentations process was accurate.
+
+In the first labeling iteration, speaker labels were attached to each segment
+by listening through the recordings and manually assigning a label. Due to
+human limitations, it was difficult to ensure speaker labels were consistent
+across files/meetings. Instead, an iterative approach was taken where:
+1. Each meeting is labeled locally, with speaker labels that apply only for
+the given file.
+2. Each (local) speaker label is assumed to belong to a unique speaker across
+all meetings and is automatically assigned a unique label.
+3. A speaker model is trained from a given amount of speech from each unique
+speaker.
+4. The speaker model is cross-verified and a prediction produced.
+5. Manually cross-check reference for incorrect speaker hypotheses; for
+reference speaker labels with multiple hypothesized speaker labels, check if
+the multiple hypothesized labels actually belong to the same speaker.
+6. Manually assign a unique speaker label for such speakers, and modify the
+reference to reflect this unique label. Hence, this step is an attempt to
+label speakers consistently across meetings.
+7. Repeat from step 2, but do not automatically assign a label to speakers
+manually edited in step 6.
+
+In this way, the reference was iteratively improved until mislabeled
+speakers were no longer uncovered. *Figure 1 illustrates this process, with
+data elements and processes depicted in rectangles and ellipses, respectively.
+
+further elaborated upon 
+
 4. Experiment
 4.1 Baseline
+
+The baseline for speaker recognition is derived from the process discussed in
+Section 3.2. An initial prediction is generated using the LIUM toolkit, using
+13 Mel-frequency Cepstral Coefficients (MFCC),
 4.2 Proposed
 
 5. Results

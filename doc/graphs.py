@@ -133,6 +133,32 @@ def dfd_online(name='dfd_online', form='png',
     dot.render(name, cleanup=True)
 
 
+def dfd_online_window(name='dfd_online_window', form='png',
+        label='Data flow diagram for windowed online speaker identification'):
+    dot = gv.Digraph(comment=label, format=form)
+    # Data nodes
+    dot.attr('node', shape='box')
+    dot.node('d1', 'Audio stream')
+    dot.node('d2', 'Segments')
+    dot.node('d3', 'Speaker model')
+    dot.node('d4', 'ASR models')
+    dot.node('d5', 'Speaker hypotheses')
+    dot.node('d6', 'Speech hypotheses')
+    dot.node('d7', 'Transcript')
+
+    # Process nodes
+    dot.attr('node', shape='ellipse')
+    dot.node('p1', 'Segment')
+    dot.node('p2', 'Identify speakers')
+    dot.node('p3', 'Identify speech')
+    dot.node('p4', 'Generate transcript')
+
+    dot.edges([('d1', 'p1'), ('p1', 'd2'), ('d2', 'p2'), ('d3', 'p2'),
+               ('p2', 'd5'), ('d2', 'p3'), ('d4', 'p3'), ('p3', 'd6'),
+               ('d5', 'p4'), ('d6', 'p4'), ('p4', 'd7')])
+    dot.render(name, cleanup=True)
+
+
 if __name__ == "__main__":
     dfd_labeling_single()
     dfd_labeling_all()
