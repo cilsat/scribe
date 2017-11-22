@@ -134,17 +134,15 @@ def dfd_online(name='dfd_online', form='png',
 
 
 def dfd_online_window(name='dfd_online_window', form='png',
-        label='Data flow diagram for windowed online speaker identification'):
+                      label='Data flow diagram for windowed online speaker identification'):
     dot = gv.Digraph(comment=label, format=form)
     # Data nodes
     dot.attr('node', shape='box')
     dot.node('d1', 'Audio stream')
     dot.node('d2', 'Segments')
     dot.node('d3', 'Speaker model')
-    dot.node('d4', 'ASR models')
     dot.node('d5', 'Speaker hypotheses')
-    dot.node('d6', 'Speech hypotheses')
-    dot.node('d7', 'Transcript')
+    dot.node('d6', 'Speaker prediction')
 
     # Process nodes
     dot.attr('node', shape='ellipse')

@@ -7,10 +7,14 @@ evaluation metrices.
 
 Diarization error rate (DER) is calculated as the per frame
 
-2. Literature
+
+2. Online Windowed Speaker Recognition
+
+2.1 Related research
 
 
-3. Data
+3. Corpus Development
+
 Data was taken from audio recordings of the meetings of the Indonesian Regional
 Representation Council (Dewan Perwakilan Daerah Republik Indonesia) throughout
 2014 and 2015. These recordings were provided by PT Inti, an Indonesian
@@ -86,7 +90,7 @@ In this way, we generate an initial prediction of the speaker segment
 boundaries and their speaker labels for each meeting.
 
 
-3.2 Labeling
+3.2 Annotation
 
 Each segment in each meeting was labeled manually to obtain speaker labels and
 genders. For the purposes of this research, speaker segment boundaries were
@@ -119,15 +123,25 @@ In this way, the reference was iteratively improved until mislabeled
 speakers were no longer uncovered. *Figure 1 illustrates this process, with
 data elements and processes depicted in rectangles and ellipses, respectively.
 
-further elaborated upon 
+further elaborated upon
 
 4. Experiment
+Step-by-step
 4.1 Baseline
 
 The baseline for speaker recognition is derived from the process discussed in
 Section 3.2. An initial prediction is generated using the LIUM toolkit, using
-13 Mel-frequency Cepstral Coefficients (MFCC),
-4.2 Proposed
+13 Mel-frequency Cepstral Coefficients (MFCC). Speaker segmentation is
+conducted by calculating the Bayesian Information Criterion (BIC) between frames
+within a segment and evaluating whether this value goes beyond an empirically
+determined threshold. Subsequent
+
+
+4.2 Proposed Method
+Penjelasan arsitektur
+The proposed method is an online, soft real-time system that produces speaker
+predictions for silence-bounded segments of speech by windowing
+offline,
 
 5. Results
 
