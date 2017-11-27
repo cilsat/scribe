@@ -134,7 +134,8 @@ def dfd_online(name='dfd_online', form='png',
 
 
 def dfd_online_window(name='dfd_online_window', form='png',
-                      label='Data flow diagram for windowed online speaker identification'):
+                      label='Data flow diagram for windowed online speaker \
+                      identification'):
     dot = gv.Digraph(comment=label, format=form)
     # Data nodes
     dot.attr('node', shape='box')

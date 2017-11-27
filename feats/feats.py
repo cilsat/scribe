@@ -15,22 +15,27 @@ from ..utils.utils import apply_parallel
 # delta computation modified from https://github.com/jameslyons/
 # python_speech_features/blob/master/python_speech_features/base.py
 def roll_delta(dfg, n=2):
-    w = np.arange(-n, n+1)
-    d = 1./np.sum([2*i*i for i in range(1, n+1)])
+    w = np.arange(-n, n + 1)
+    d = 1. / np.sum([2 * i * i for i in range(1, n + 1)])
 
     # uses segment_axis to efficiently generate an overlapping window view of
     # the data and apply the weighting/summing delta function
-    delta = lambda nd: np.sum(sa(np.concatenate(([nd[0] for _ in range(n)], nd,
-        [nd[-1] for _ in range(n)])), n*2+1, n*2, 0).swapaxes(1,2) * w, axis=-1)*d
+    def delta(nd):
+        pad0 = [nd[0] for _ in range(n)]
+        pad1 = [nd[-1] for _ in range(n)]
+        padded = np.concatenate((pad0, nd, pad1))
+        return np.sum(sa(pad, n * 2 + 1, n * 2, 0).swapaxes(1, 2) * w, axis=-1) * d
 
     nd_d = delta(dfg.values)
     nd_dd = delta(nd_d)
 
     return pd.concat((dfg,
-        pd.DataFrame(nd_d, index=dfg.index, dtype=np.float16),
-        pd.DataFrame(nd_dd, index=dfg.index, dtype=np.float16)), axis=1)
+                      pd.DataFrame(nd_d, index=dfg.index, dtype=np.float16),
+                      pd.DataFrame(nd_dd, index=dfg.index, dtype=np.float16)), axis=1)
 
 # computes delta features in parallel
+
+
 def compute_deltas(df_mfcc, n=2):
     # group features by utterance and compute deltas/delta-deltas
     mg = df_mfcc.groupby(df_mfcc.index)
@@ -53,22 +58,26 @@ def count_phones_per_spkr(dfg_mfcc, dfg_phon):
     spk_frames = []
     for utt, frames in dfg_mfcc.groupby(dfg_mfcc.index):
         seg = dfg_phon.loc[utt]
-        idx = [(i, r) for i in range(len(seg)) for r in repeat(seg.phon.iloc[i], seg.dur.iloc[i])]
+        idx = [(i, r) for i in range(len(seg))
+               for r in repeat(seg.phon.iloc[i], seg.dur.iloc[i])]
         dif = len(frames) - len(idx)
         if dif > 0:
             idx.extend([idx[-1] for _ in range(dif)])
         spk_frames.extend(idx)
     spk_frames = np.array(spk_frames, dtype=np.uint16)
-    return dfg_mfcc.assign(ord=spk_frames[:,0], phon=spk_frames[:,1])
+    return dfg_mfcc.assign(ord=spk_frames[:, 0], phon=spk_frames[:, 1])
 
 # align MFCC dataframe to phone dataframe.
 # returns frame-level alignments for phone segment number (within utterance),
 # phone symbol, and speaker.
+
+
 def align_phones(df_mfcc, df_phon, spk_group=(), seq=False):
     # use the minimal subset of utt/files contained in both dataframes
     # drop utterances with only 1 phone
     dif = set(df_mfcc.index) ^ set(df_phon.index)
-    drop = set(df_phon.loc[df_phon.groupby(df_phon.index).dur.count() == 1].index)
+    drop = set(df_phon.loc[df_phon.groupby(
+        df_phon.index).dur.count() == 1].index)
     drop |= dif
     df_mfcc.drop(drop, inplace=True)
     df_phon.drop(drop, inplace=True)
@@ -78,8 +87,8 @@ def align_phones(df_mfcc, df_phon, spk_group=(), seq=False):
     # in this case, the speaker can be identified by the first 9 chars in file
     if spk_group:
         start, end = spk_group
-        dfg_spk_mfcc = df_mfcc.groupby(df_mfcc.index.str[start:end])
-        dfg_spk_phon = df_phon.groupby(df_phon.index.str[start:end])
+        dfg_spk_mfcc = df_mfcc.groupby(df_mfcc.index.str[start: end])
+        dfg_spk_phon = df_phon.groupby(df_phon.index.str[start: end])
         args = [(g, dfg_spk_phon.get_group(n)) for n, g in dfg_spk_mfcc]
     else:
         dfg_mfcc = df_mfcc.groupby(df_mfcc.index)
@@ -134,9 +143,11 @@ def compute_seg_feats(df_ali, spk_group=(0, 9)):
 
 def compute_utt_feats(df_seg):
     """
-    df_seg = df_seg.drop(df_seg.columns[df_seg.columns.str.contains('phon')], axis=1)
+    df_seg = df_seg.drop(
+        df_seg.columns[df_seg.columns.str.contains('phon')], axis=1)
     dfg_feat = df_seg.groupby(df_seg.index.get_level_values(0))
-    df_utt = pd.concat((dfg_feat.mean().astype(np.float16), dfg_feat.var().astype(np.float16)), axis=1)
+    df_utt = pd.concat((dfg_feat.mean().astype(np.float16),
+                       dfg_feat.var().astype(np.float16)), axis=1)
     cols = df_seg.columns
     df_utt.columns = ['avg_'+c for c in cols] + ['var_'+c for c in cols]
     """
@@ -147,7 +158,7 @@ def compute_utt_feats(df_seg):
     # group by utterance
     dfg_utt = df.groupby(df.index.get_level_values(0))
     # compute normalized means
-    df_utt = dfg_utt.mean()/dfg_utt.std()
+    df_utt = dfg_utt.mean() / dfg_utt.std()
     # drop utterances with NaN or Inf
     df_utt = df_utt[np.all(np.isfinite(df_utt), axis=1)]
 
@@ -158,11 +169,11 @@ def compute_vad(feats, context=5, proportion=0.8):
     # assumes first column of feats is log energy
     log_eng = feats[:, 0]
     # simple energy based cutoff, needs adjustment for real time usage
-    cutoff = 5 + 0.5*log_eng.mean()
+    cutoff = 5 + 0.5 * log_eng.mean()
     # within a context window centred around the current frame, count the
     # number of frames above the cutoff point
-    props = np.array([np.sum(win > cutoff) for win in sa(np.concatenate((np.zeros(context), log_eng, np.zeros(context))), context*2 + 1, context*2)])
+    props = np.array([np.sum(win > cutoff) for win in sa(np.concatenate(
+        (np.zeros(context), log_eng, np.zeros(context))), context * 2 + 1, context * 2)])
     # return True (voiced) if the number of frames above the cutoff is above a
     # certain proportion
-    return props/context > proportion
-
+    return props / context > proportion
