@@ -68,24 +68,24 @@ $java -Xmx4096m -classpath "$LOCALCLASSPATH" fr.lium.spkDiarization.programs.MSe
 
 # linear clustering
 $java -Xmx4096m -classpath "$LOCALCLASSPATH" fr.lium.spkDiarization.programs.MClust   --trace --help --fInputMask=$features --fInputDesc=$fDesc --sInputMask=$datadir/%s.s.seg --sOutputMask=$datadir/%s.l.seg --cMethod=l --cThr=2 $show
- 
+
 h=3
 # hierarchical clustering
 $java -Xmx4096m -classpath "$LOCALCLASSPATH" fr.lium.spkDiarization.programs.MClust   --trace --help --fInputMask=$features --fInputDesc=$fDesc --sInputMask=$datadir/%s.l.seg --sOutputMask=$datadir/%s.h.$h.seg --cMethod=h --cThr=$h $show
- 
+
 # initialize GMM
 $java -Xmx4096m -classpath "$LOCALCLASSPATH" fr.lium.spkDiarization.programs.MTrainInit   --help --nbComp=8 --kind=DIAG --fInputMask=$features --fInputDesc=$fDesc --sInputMask=$datadir/%s.h.$h.seg --tOutputMask=$datadir/%s.init.gmms $show
- 
+
 # EM computation
 $java -Xmx4096m -classpath "$LOCALCLASSPATH" fr.lium.spkDiarization.programs.MTrainEM   --help  --nbComp=8 --kind=DIAG --fInputMask=$features --fInputDesc=$fDesc --sInputMask=$datadir/%s.h.$h.seg --tOutputMask=$datadir/%s.gmms  --tInputMask=$datadir/%s.init.gmms  $show
- 
+
 #Viterbi decoding
 $java -Xmx4096m -classpath "$LOCALCLASSPATH" fr.lium.spkDiarization.programs.MDecode   --trace --help --fInputMask=${features} --fInputDesc=$fDesc --sInputMask=$datadir/%s.h.$h.seg --sOutputMask=$datadir/%s.d.$h.seg --dPenality=250  --tInputMask=$datadir/%s.gmms $show
- 
+
 #Adjust segment boundaries
 adjseg=$datadir/$show.adj.$h.seg
 $java -Xmx4096m -classpath "$LOCALCLASSPATH" fr.lium.spkDiarization.tools.SAdjSeg --help  --trace --fInputMask=$features --fInputDesc=audio16kHz2sphinx,1:1:0:0:0:0,13,0:0:0 --sInputMask=$datadir/%s.d.$h.seg --sOutputMask=$adjseg $show
- 
+
 #filter spk segmentation according pms segmentation
 fltseg=$datadir/$show.flt.$h.seg
 $java -Xmx4096m -classpath "$LOCALCLASSPATH" fr.lium.spkDiarization.tools.SFilter --help  --fInputDesc=audio2sphinx,1:3:2:0:0:0,13,0:0:0 --fInputMask=$features --fltSegMinLenSpeech=150 --fltSegMinLenSil=25 --sFilterClusterName=j --fltSegPadding=25 --sFilterMask=$pmsseg --sInputMask=$adjseg --sOutputMask=$fltseg $show
@@ -105,4 +105,4 @@ $java -Xmx4096m -classpath "$LOCALCLASSPATH" fr.lium.spkDiarization.programs.MSc
 c=1.7
 spkseg=$datadir/$show.c.$h.seg
 $java -Xmx4096m -classpath "$LOCALCLASSPATH" fr.lium.spkDiarization.programs.MClust  --help --trace --fInputMask=$features --fInputDesc=$fDescCLR --sInputMask=$gseg --sOutputMask=$datadir/%s.c.$h.seg --cMethod=ce --cThr=$c --tInputMask=$ubm --emCtrl=1,5,0.01 --sTop=5,$ubm --tOutputMask=$datadir/$show.c.gmm $show
- 
+

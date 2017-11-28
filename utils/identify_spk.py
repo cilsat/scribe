@@ -29,35 +29,36 @@ def main():
     stage = 0
 
     parser = ArgumentParser(description="Train speaker models using a portion \
-            of speaker data retrieved from reference files (.lbl), and test on \
+            of speaker data retrieved from reference files (.lbl), and test \
             the entire file. Calculate error rate and write to csv.",
                             formatter_class=RawTextHelpFormatter)
     parser.add_argument("--data_path", type=str, default=data_path,
-                        help="Path to directory containing wavs, segs, and lbls.")
+                        help="Path to directory containing wavs, segs, lbls.")
     parser.add_argument("--ubm_path", type=str, default=ubm_path,
                         help="Path LIUM UBM.")
     parser.add_argument("--exp_path", type=str, default="exp",
-                        help="Path to directory storing experiment results, relative to the\
-                data_path.")
+                        help="Path to directory storing experiment results, \
+                                relative to the data_path.")
     parser.add_argument("--lium_path", type=str, default=lium_path,
                         help="Path to LIUM jar.")
     parser.add_argument("--duration", type=int, default=120,
-                        help="Duration of speech in seconds to use for speaker model \
-            training.")
+                        help="Duration of speech in seconds to use for \
+                                speaker model training.")
     parser.add_argument("--stage", type=int, default=stage,
-                        help="Start at a particular stage of the identification process:\n\
-            0: Preprocessing of speaker models.\n\
-            1: Training of speaker models.\n\
-            2: Testing/identification of speaker segments.\n\
-            3: Calculate error rates based on ref and hyp.")
+                        help="Start at a particular stage of the \
+                                identification process:\n\
+                            0: Preprocessing of speaker models.\n\
+                            1: Training of speaker models.\n\
+                            2: Testing/identification of speaker segments.\n\
+                            3: Calculate error rates based on ref and hyp.")
 
     args = parser.parse_args()
     if not os.path.exists(args.exp_path):
         os.mkdir(args.exp_path)
     res = all(args.data_path, args.ubm_path, args.exp_path,
               args.lium_path, args.duration, args.stage)
-    # res = multiple(args.data_path, args.ubm_path, args.exp_path, args.lium_path,
-    #        args.duration, args.stage)
+    res = multiple(args.data_path, args.ubm_path, args.exp_path,
+                   args.lium_path, args.duration, args.stage)
     print(res)
     # print('all: ', res.err.sum() / res.dur.sum())
     # res.to_csv(os.path.join(args.exp_path, 'res.csv'), sep=' ')
@@ -123,7 +124,8 @@ def id_spk(name, data_path, ubm_path, exp_path, lium_path, duration, stage):
 
     # run speaker identification
     test_cmd = [
-        'java', '-cp', lium_path, 'fr.lium.spkDiarization.programs.Identification',
+        'java', '-cp', lium_path,
+        'fr.lium.spkDiarization.programs.Identification',
         '--sInputMask=' + tseg, '--fInputMask=' + src, '--sOutputMask=' + iseg,
         '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
         '--tInputMask=' + gmm, '--sTop=5,' + ubm, '--sSetLabel=add', name
