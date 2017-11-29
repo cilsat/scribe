@@ -3,6 +3,11 @@
 import graphviz as gv
 
 
+def diarization(name='diarization', form='png',
+                label='Illustration of the diarization process'):
+    pass
+
+
 def dfd_labeling_single(name='dfd_labeling_single', form='png',
                         label='Data flow diagram for labeling a meeting'):
     dot = gv.Digraph(comment=label, format=form)

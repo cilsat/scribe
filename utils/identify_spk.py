@@ -12,8 +12,8 @@ import os
 import sys
 import pandas as pd
 import numpy as np
-from lium_utils import seg2df, lbl2seg, lbl2df, make_spk
 from multiprocessing import Pool, cpu_count
+from lium_utils import seg2df, lbl2seg, lbl2df, make_spk
 from subprocess import run, PIPE, STDOUT, DEVNULL
 from argparse import ArgumentParser, RawTextHelpFormatter
 
@@ -29,8 +29,8 @@ def main():
     stage = 0
 
     parser = ArgumentParser(description="Train speaker models using a portion \
-            of speaker data retrieved from reference files (.lbl), and test \
-            the entire file. Calculate error rate and write to csv.",
+of speaker data retrieved from reference files (.lbl), and test \
+the entire file. Calculate error rate and write to csv.",
                             formatter_class=RawTextHelpFormatter)
     parser.add_argument("--data_path", type=str, default=data_path,
                         help="Path to directory containing wavs, segs, lbls.")
@@ -38,27 +38,27 @@ def main():
                         help="Path LIUM UBM.")
     parser.add_argument("--exp_path", type=str, default="exp",
                         help="Path to directory storing experiment results, \
-                                relative to the data_path.")
+relative to the data_path.")
     parser.add_argument("--lium_path", type=str, default=lium_path,
                         help="Path to LIUM jar.")
     parser.add_argument("--duration", type=int, default=120,
                         help="Duration of speech in seconds to use for \
-                                speaker model training.")
+speaker model training.")
     parser.add_argument("--stage", type=int, default=stage,
                         help="Start at a particular stage of the \
-                                identification process:\n\
-                            0: Preprocessing of speaker models.\n\
-                            1: Training of speaker models.\n\
-                            2: Testing/identification of speaker segments.\n\
-                            3: Calculate error rates based on ref and hyp.")
+identification process: \n \
+    0: Preprocessing of speaker models.\n \
+    1: Training of speaker models.\n \
+    2: Testing / identification of speaker segments.\n \
+    3: Calculate error rates based on ref and hyp.")
 
     args = parser.parse_args()
     if not os.path.exists(args.exp_path):
         os.mkdir(args.exp_path)
     res = all(args.data_path, args.ubm_path, args.exp_path,
               args.lium_path, args.duration, args.stage)
-    res = multiple(args.data_path, args.ubm_path, args.exp_path,
-                   args.lium_path, args.duration, args.stage)
+    # res = multiple(args.data_path, args.ubm_path, args.exp_path,
+    # args.lium_path, args.duration, args.stage)
     print(res)
     # print('all: ', res.err.sum() / res.dur.sum())
     # res.to_csv(os.path.join(args.exp_path, 'res.csv'), sep=' ')
@@ -154,7 +154,7 @@ def id_spk(name, data_path, ubm_path, exp_path, lium_path, duration, stage):
 def all(data, ubm, exp, lium, dur, stage):
     """
     Differs from id_spk in that the speaker model is trained from ALL
-    sessions/meetings.
+    sessions / meetings.
     """
     name = 'spk'
     src = os.path.join(exp, name + '.wav')
@@ -188,11 +188,13 @@ def all(data, ubm, exp, lium, dur, stage):
         train(lium, sseg, src, ubm, igmm, gmm, name, log)
 
     names = [w.split('.')[0] for w in os.listdir(data) if w.endswith('.wav')]
+    names.sort()
+
     if stage < 3:
         # read files and sanitize
         args = [(lium, os.path.join(exp, n + '.t.seg'),
-                 os.path.join(
-                     data, n + '.wav'), os.path.join(exp, n + '.i.seg'),
+                 os.path.join(data, n + '.wav'),
+                 os.path.join(exp, n + '.i.seg'),
                  gmm, ubm, n, os.path.join(exp, n + '.log')) for n in names]
         # build speaker models and do speaker id in parallel
         with Pool(cpu_count()) as pool:

@@ -47,13 +47,13 @@ sgmm=$model/s.gmms
 ggmm=$model/gender.gmms
 
 
-LOCALCLASSPATH='/home/cilsat/downloads/bin/lium_spkdiarization-8.4.1.jar'
+LOCALCLASSPATH='/home/cilsat/down/prog/lium_spkdiarization-8.4.1.jar'
 
 echo "#####################################################"
 echo "#   $show"
 echo "#####################################################"
 
-mkdir $datadir >& /dev/null
+mkdir -p $datadir >& /dev/null
 
 $java -Xmx4096m -classpath "$LOCALCLASSPATH" fr.lium.spkDiarization.programs.MSegInit  --trace --help --fInputMask=$features --fInputDesc=$fDesc --sInputMask=$uem --sOutputMask=$datadir/%s.i.seg  $show
 

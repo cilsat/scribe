@@ -45,9 +45,11 @@ Each meeting was subsequently analyzed to determine when speaker changes
 occurred, known variously as speaker change detection, speaker turn
 identification, and speaker segmentation. In an offline setting, this typically
 consists of the following steps in most speech diarization systems:
-1) Divide audio into frames.
-2) First pass using BL.
-3) Second pass using KL2.
+
+1. Divide audio into frames.
+2. First pass using BL.
+3. Second pass using KL2.
+
 In practice, speaker segmentation mostly succeeds in guaranteeing individual
 segments contain at most one speaker, but fails to ensure consecutive segments
 belong to different speakers.
@@ -55,9 +57,10 @@ belong to different speakers.
 This process is typically followed by hierarchical clustering of speakers
 based on information dervied from the resulting speaker segments. In an offline
 setting, this is achieved via the following steps:
-1) Train a GMM for each speaker segment
-2) Specify a difference metric as the basis for clustering
-3) Cluster segments hierarchically using difference threshold as reference
+
+1. Train a GMM for each speaker segment
+2. Specify a difference metric as the basis for clustering
+3. Cluster segments hierarchically using difference threshold as reference
 
 
 # 2 Online Windowed Speaker Recognition
@@ -87,24 +90,25 @@ function, the council is also occasionally called upon to resolve conflicts
 between regional stakeholders and the government. The subject matter and
 structure of the meetings can generally be classified into one of the
 following topics:
-1) Expert consultation sessions. Experts in relevant fields are called upon to
+
+1. Expert consultation sessions. Experts in relevant fields are called upon to
 assess the current status of the issue being discussed and are asked to present
 their topic of expertise. These meetings will typically consist of one or more
 experts presenting their topics uninterrupted, before concluding with a
 question and answering session.
-2) Discussing recommendations. These meetings are typically heavily moderated
+2. Discussing recommendations. These meetings are typically heavily moderated
 discussion sessions, whereby the moderator goes through the prepared document
 in sections and calls upon the relevant teams for clarification, before opening
 discussion to the floor for that section. Although still relatively structured
 due to the moderation, these meetings can at times produce portions of
 overlapping speech.
-3) Summons. Government officers are summoned to discuss issues related to their
+3. Summons. Government officers are summoned to discuss issues related to their
 performance or regarding matters of importance.
-3) Conflict resolution. This involves a hearing between two sides in a conflict
+4. Conflict resolution. This involves a hearing between two sides in a conflict
 usually regarding settlements related to land rights. The two sides are called
 upon to make statements regarding the issue before the council, after which
 the council will discuss the issue.
-4) Internal sessions. These are usually meetings to discuss internal matters,
+5. Internal sessions. These are usually meetings to discuss internal matters,
 for instance with regards to scheduling future meetings, deadlines, diplomatic
 visits to various regions, et cetera.
 
@@ -165,20 +169,21 @@ In the first labeling iteration, speaker labels were attached to each segment
 by listening through the recordings and manually assigning a label. Due to
 human limitations, it was difficult to ensure speaker labels were consistent
 across files/meetings. Instead, an iterative approach was taken where:
-1) Each meeting is labeled locally, with speaker labels that apply only for
+
+1. Each meeting is labeled locally, with speaker labels that apply only for
 the given file.
-2) Each (local) speaker label is assumed to belong to a unique speaker across
+2. Each (local) speaker label is assumed to belong to a unique speaker across
 all meetings and is automatically assigned a unique label.
-3) A speaker model is trained from a given amount of speech from each unique
+3. A speaker model is trained from a given amount of speech from each unique
 speaker.
-4) The speaker model is cross-verified and a prediction produced.
-5) Manually cross-check reference for incorrect speaker hypotheses; for
+4. The speaker model is cross-verified and a prediction produced.
+5. Manually cross-check reference for incorrect speaker hypotheses; for
 reference speaker labels with multiple hypothesized speaker labels, check if
 the multiple hypothesized labels actually belong to the same speaker.
-6) Manually assign a unique speaker label for such speakers, and modify the
+6. Manually assign a unique speaker label for such speakers, and modify the
 reference to reflect this unique label. Hence, this step is an attempt to
 label speakers consistently across meetings.
-7) Repeat from step 2, but do not automatically assign a label to speakers
+7. Repeat from step 2, but do not automatically assign a label to speakers
 manually edited in step 6.
 
 In this way, the reference was iteratively improved until mislabeled
@@ -190,7 +195,7 @@ Figure 1 above illustrates this process, with data elements and processes
 depicted in rectangles and ellipses, respectively.
 
 
-# 4 Experiment
+# 4 Experiment and Results
 
 ## 4.1 Overview and Speaker Model
 
@@ -211,45 +216,58 @@ speaker model, as this correlates to a shorter enrollment time in real life
 usage. Hence, speaker models using 60, 90, and 120 seconds of training data per
 speaker were trained and tested. For each of these models, the steps are as
 follows:
-1) For each speaker in the cleaned corpus, determine whether enough speech data
+
+1. For each speaker in the cleaned corpus, determine whether enough speech data
 is available for training the given speaker. If a speaker has spoken for less
 than 60, 90, or 120 seconds throughout the entire corpus, they are excluded
 from training *and* testing.
-2) If enough data is available, set aside the first 60, 90, or 120 seconds of
+2. If enough data is available, set aside the first 60, 90, or 120 seconds of
 speech for training and the rest for testing. Note that this may be problematic
 when speakers' voices change throughout the meeting, or when the first minute
 of speech has insufficient tonal variation.
-3) Run maximum a priori (MAP) adaptation against a suitable universal
+3. Run maximum a priori (MAP) adaptation against a suitable universal
 background model (UBM) for all speaker training data, resulting in a final
 speaker model containing all speakers. As an appropriate separate Indonesian
 language corpus was unavailable, the UBM was pre-built from a different source.
+4. Evaluate the speaker model using the test data set aside in step 2 by
+calculating the per frame speaker identification accuracy. The results of this
+step are detailed in Table 2.
 
+Training data (s)   SER (%)   # Speakers
+----                ------    ----
+60
+90
+120                 13.21     157
 
-# 4.2 Baseline System
+## 4.2 Baseline System
 
 The baseline system utilizes the standard LIUM toolkit setup to implement
 offline speaker diarization using data obtained from the corpus discussed in
-Section 3. The default setup is as follows:
-1) Feature extraction with 12 Mel-Frequency Cepstral Coefficients (MFCC) in
-Sphinx format from 16 kHz audio files with additional engery, delta, and
+Section 3. This process has been covered in depth in *ref* and *ref*, with the
+relevant configuration for this experiment as follows:
+
+1. Feature extraction with 12 Mel-Frequency Cepstral Coefficients (MFCC) in
+Sphinx format from 16 kHz audio files with additional energy, delta, and
 delta-delta information calculated during pre-processing. Feature warping,
 cepstral mean normalization (CMS), and variance normalization are applied on a
 300 frame sliding window for robustness purposes.
-2)
+2. Initial speaker segmentation, followed by classification of speech, music,
+and silence segments.
+3. GLR-based segmentation followed by linear and hierarchical clustering of
+resulting speaker segments.
+4.
 
-The baseline for speaker recognition is derived from the process discussed in
-Section 3.3. An initial prediction is generated using the LIUM toolkit, using
-13 Mel-frequency Cepstral Coefficients (MFCC). Speaker segmentation is
-conducted by calculating the Bayesian Information Criterion (BIC) between frames
-within a segment and evaluating whether this value goes beyond an empirically
-determined threshold. Subsequent
+The system is evaluated by decoding and identifying the corpus assembled in
+Section 3, with the results displayed in Table 3. It should be noted that
+because the speaker model itself is built from this data, portions of the
+training data are evaluated by the system. This equally applies to the online
+system.
 
-## 4.2 Proposed Method
+## 4.3 Proposed Method
 Penjelasan arsitektur
 The proposed method is an online, soft real-time system that produces speaker
 predictions for silence-bounded segments of speech by windowing
 offline,
 
-# 5 Results
 
 # 6 Conclusion
