@@ -337,8 +337,7 @@ def lium_maw(name, out_dir, win_size=3):
     with open(logs[0]) as f:
         raw = f.read().split('Picked up _JAVA_OPTIONS')[-1].splitlines()[45:]
     spkr = [int(x[5][1:-1])
-            for x in (r.split()
-                      for r in raw if r.find('score S') > 0)]
+            for x in (r.split() for r in raw if r.find('score S') > 0)]
 
     # Parse logs to obtain id scores for all speakers
     spk_scores = np.vstack([lium_parse_log(l) for l in logs])

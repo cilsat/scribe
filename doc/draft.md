@@ -264,6 +264,14 @@ training data are evaluated by the system. This equally applies to the online
 system.
 
 ## 4.3 Proposed Method
+
+The online system implements a simple voice activity detector (VAD) to detect
+the beginning and ending of utterances, splitting the incoming audio stream
+into a separate segment whenever voice activity is not detected. LIUM toolkit
+is then used to run speaker identification on the segment against the speaker
+model obtained in Section 4.1. For the current utterance, the system outputs
+the most likely speaker calculated over a sliding window of previous 
+
 Penjelasan arsitektur
 The proposed method is an online, soft real-time system that produces speaker
 predictions for silence-bounded segments of speech by windowing
