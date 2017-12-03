@@ -5,7 +5,21 @@ import graphviz as gv
 
 def diarization(name='diarization', form='png',
                 label='Illustration of the diarization process'):
-    pass
+    dot = gv.Digraph(comment=label,
+                     format=form,
+                     node_attr={'shape': 'record', 'width': '1'})
+
+    dot.attr('node', shape='record')
+    dot.node('d1', '<f0> Audio signal')
+    dot.node(
+        'd2', '<f0> Segment 1|<f1> Segment 2|<f2> Segment 3|<f3> Segment 4|<f4> Segment 5')
+    dot.node(
+        'd3', '<f0> Speaker 1|<f1> Speaker 2|<f2> Speaker 1|<f3> Speaker 3|<f4> Speaker 2')
+    dot.node('d4', '<f0> Bob|<f1> Alice|<f2> Bob|<f3> Carol|<f4> Alice')
+
+    dot.edges([('d1:f0', 'd2:f3'), ('d2:f3', 'd3:f3'), ('d3:f3', 'd4:f3')])
+
+    dot.render(name, cleanup=True)
 
 
 def dfd_labeling_single(name='dfd_labeling_single', form='png',
@@ -164,8 +178,9 @@ def dfd_online_window(name='dfd_online_window', form='png',
 
 
 if __name__ == "__main__":
-    dfd_labeling_single()
-    dfd_labeling_all()
-    dfd_baseline()
-    dfd_offline()
-    dfd_online()
+    diarization()
+    # dfd_labeling_single()
+    # dfd_labeling_all()
+    # dfd_baseline()
+    # dfd_offline()
+    # dfd_online()

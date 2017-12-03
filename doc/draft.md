@@ -2,42 +2,48 @@
 
 # Abstract
 
-Online speaker diarization is the process of predicting 'who spoke when'
-utilizing information up until the current moment. This is in contrast to
+Online speaker diarization is the process of determining 'who spoke when'
+given an ongoing conversation or audio stream, in contrast to the offline
+scenario where the conversation has concluded and the entire file is available.
+The process of constructing an Indonesian language online speaker diarization
+system is explored, from corpus development to software design and testing.
+The system conducts speaker identification directly on silence separated
+segments and employs a simple averaging post-processing method to boost
+accuracy, resulting in a system with a one utterance latency for predictions.
+Experimentation against a standard baseline offline system resulted in a
+speaker error rate (SER) of 25.5% and *tbd* for the proposed and baseline
+systems, respectively.
 
 # 1 Background
 
 Speaker diarization is the process of determining 'who spoke when', for
-instance in a conference or interview setting.
-The task of speaker diarization is to take audio containing speech from one or
-more speakers and determine the identity of the speaker at any given time.
-In online speaker diarization, there is the additional constraint of producing
-these identities in a timely manner, be it in regular time intervals or at
-certain speech boundaries.
-Online speaker diarization differs from offline speaker diarizationn mainly in
-the amount of information available for analysis; online diarization makes use
-of all data available up to the current time, whereas for offline diarization
-data at all time points is available.
+instance in a conference or interview setting. The task of speaker diarization
+is to take audio containing speech from one or more speakers and determine the
+identity of the speaker at any given time. In online speaker diarization, there
+is the additional constraint of producing these identities in a timely manner,
+be it in regular time intervals or at certain speech boundaries. Online speaker
+diarization differs from offline speaker diarizationn mainly in the amount of
+information available for analysis; online diarization makes use of all data
+available up to the current time, whereas for offline diarization data at all
+time points is available.
 
 In general, the diarization process can be broken down into a number of steps.
 In speaker segmentation, the incoming speech is split into segments containing
-speech from a single speaker.
-In speaker clustering, the segments belonging to the same speaker are
-grouped together.
-Finally, these groups of segments are used to run speaker identification.
-Additional post-processing methods are used to improve predictions, but are
-often dependent on analysis over the entire length of speech, which may be
-unavailable in advance in the online scenario.
+speech from a single speaker. In speaker clustering, the segments belonging to
+the same speaker are grouped together. Finally, these groups of segments are
+used to run speaker identification. Additional post-processing methods are used
+to improve predictions, but are often dependent on analysis over the entire
+length of speech, which may be unavailable in advance in the online scenario.
 
 Online speaker diarization is important when real time or close to real time
 information regarding speakers is required. Paired with online speech
 recognition, for example, it becomes possible to generate a transcription of an
-ongoing conference or meeting. This research describes the architecture and
-process of building an online transcription system for such a purpose.
+ongoing conference or meeting. Other uses include the addition of real time or
+close to real time machine translation and summarization. This research
+describes the process of constructing an online speaker diarization system,
+detailing the corpus development, system design, and experiments.
 
-
-- try to steer towards real life usage of systems instead of 'artificial'
-evaluation metrices.
+Many approaches have been taken over 
 
 Diarization error rate (DER) is calculated as the per frame
 
@@ -114,23 +120,22 @@ visits to various regions, et cetera.
 
 An overview of the meetings is presented in *table*.
 
-Meeting ID  Topic           Type  # Speakers  Cleanliness
----         --------------  -------------
-2           Mother and child healthcare
-3
-4
-5
-6
-7
-8
-9
-10
-11
-12
-46
-48
-53
-57
+Meeting ID        Topic                         Type
+---------------   ----------------------------  ------------
+2,3               Mother and child healthcare   Consultation
+4,10,32,46        Scheduling                    Internal
+5                 Tax ministry                  Summon
+6,34,48           Tax law revisions             Discussion
+7                 Bank Indonesia governor       Summon
+8                 National auditing report      Discussion
+9,18              Budget office                 Consultation
+11,12,13          Budget office                 Discussion
+21,29,30,49,50    Koperasi                      Consultation
+38                Koperasi                      Discussion
+33,40             Budget recommendations        Discussion
+44                Land dispute                  Conflict
+45,127            Agriculture ministry          Summon
+53,57             National planning             Discussion
 
 ## 3.2 Pre-processing
 
@@ -235,9 +240,24 @@ step are detailed in Table 2.
 
 Training data (s)   SER (%)   # Speakers
 ----                ------    ----
-60
+30                  49.12     223
+60                  21.71     201
 90
 120                 13.21     157
+150                 10.15
+
+There is a difference between speaker model training on a corpus and training
+through speaker enrollment. When training on a corpus, as the amount of
+training data per speaker is increased, a larger proportion of speakers can no
+longer be trained and tested. This is noted in Table 2, which notes the number
+of speakers trained and tested. Also, whereas in this case the speech taken for
+each speaker's training is from the very beginning of their turns, in speaker
+enrollment we have the opportunity to obtain speech according to our specific
+needs. For instance, as speakers can often be discriminated from the sound
+of their vowels, we may want to provide a sentence containing mostly vowels
+for enrollment, which is not possible in corpus training without utilizing a
+phoneme recognizer beforehand. In this way, it is possible to obtain better
+results in less time through enrollment.
 
 ## 4.2 Baseline System
 
@@ -270,12 +290,32 @@ the beginning and ending of utterances, splitting the incoming audio stream
 into a separate segment whenever voice activity is not detected. LIUM toolkit
 is then used to run speaker identification on the segment against the speaker
 model obtained in Section 4.1. For the current utterance, the system outputs
-the most likely speaker calculated over a sliding window of previous 
+the most likely speaker calculated over a sliding window. The online system is
+illustrated in *Figure 3*.
 
-Penjelasan arsitektur
-The proposed method is an online, soft real-time system that produces speaker
-predictions for silence-bounded segments of speech by windowing
-offline,
+![Data flow diagram for proposed system](dfd_online.png)
+
+In detail, the process can be broken down into the following steps:
+1. Analyze the incoming audio stream to detect voice activity.
+2. When a portion of the signal is voiced, keep the samples in a separate
+buffer.
+3. When a silent/non-voiced portion of the signal is encountered, if the
+silence is preceded by a voiced portion and if the length of silence exceeds a
+specified threshold, write the buffer to a file. This is our speaker segment.
+4. Run speaker identification on the segment against the speaker model obtained
+in Section 4.1, storing the likelihood of *all* speakers.
+5. Take all speaker predictions from the previous *n* segments or *t* time,
+whichever is shorter, and calculate the average score for each speaker in this
+period. The highest scoring speaker is output as the prediction for this
+segment.
+
+The results of the baseline and proposed systems for the 120 second speaker
+model is detailed in Table 3.
+
+Method      SER (%)
+---------   ------
+baseline
+proposed
 
 
 # 6 Conclusion
