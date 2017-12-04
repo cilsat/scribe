@@ -43,7 +43,7 @@ close to real time machine translation and summarization. This research
 describes the process of constructing an online speaker diarization system,
 detailing the corpus development, system design, and experiments.
 
-Many approaches have been taken over 
+Many approaches have been taken over
 
 Diarization error rate (DER) is calculated as the per frame
 
@@ -192,12 +192,20 @@ label speakers consistently across meetings.
 manually edited in step 6.
 
 In this way, the reference was iteratively improved until mislabeled
-speakers were no longer encountered.
+speakers were no longer encountered. Figure 1 illustrates this process, with
+data elements and processes depicted in rectangles and ellipses, respectively.
 
 ![Data flow diagram for experiment baseline](dfd_baseline.png)
 
-Figure 1 above illustrates this process, with data elements and processes
-depicted in rectangles and ellipses, respectively.
+In total, 236 speakers were identified. Due to the cross-checking method above,
+though, speakers with a lack of training data could not be verified, and there
+may be a number of double-counted speakers. The corpus contains 42.81 hours of
+speech, discounting silence, noise, and overlapping speaker segments. On
+average, each speaker has around 653.1 seconds of speech. However, due to the
+moderated nature of the meetings a small number of speakers contributed a large
+part of the recorded speech.
+
+It may be useful to
 
 
 # 4 Experiment and Results
@@ -242,9 +250,10 @@ Training data (s)   SER (%)   # Speakers
 ----                ------    ----
 30                  49.12     223
 60                  21.71     201
-90
+90                  13.62     178
 120                 13.21     157
-150                 10.15
+150                 10.15     138
+180                 11.65     123
 
 There is a difference between speaker model training on a corpus and training
 through speaker enrollment. When training on a corpus, as the amount of
@@ -314,8 +323,8 @@ model is detailed in Table 3.
 
 Method      SER (%)
 ---------   ------
-baseline
-proposed
+Baseline
+Proposed
 
 
 # 6 Conclusion
