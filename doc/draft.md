@@ -205,8 +205,6 @@ average, each speaker has around 653.1 seconds of speech. However, due to the
 moderated nature of the meetings a small number of speakers contributed a large
 part of the recorded speech.
 
-It may be useful to
-
 
 # 4 Experiment and Results
 
