@@ -273,6 +273,13 @@ def make_ubm(out, path='/home/cilsat/data/speech/rapat', min_dur=9000,
     return segs
 
 
+def id2df(idseg):
+    df = seg2df(idseg)
+    df.lbl = df.lbl.str.split('#').map(lambda x: int(x[-1][1:]))
+    df.drop('spkr', axis=1, inplace=True)
+    return df
+
+
 if __name__ == "__main__":
     path = sys.argv[1]
     df = seg2df(path)

@@ -99,19 +99,19 @@ def main():
 
     paths = {n: os.path.join(args.out_dir, n) for n in names}
 
-    if args.stage < 2:
+    if args.stage <= 1:
         for n in names:
             if not os.path.exists(paths[n]):
                 os.mkdir(paths[n])
             file_input(in_file=os.path.join(
                 args.data_path, n + '.wav'), out_dir=paths[n])
 
-    if args.stage < 3:
+    if args.stage <= 2:
         map_args = [(n, paths[n]) for n in names]
         with Pool(args.ncpu) as p:
             p.starmap(lium_test, map_args)
 
-    if args.stage < 4:
+    if args.stage <= 3:
         map_args = [(n, paths[n], args.data_path) for n in names]
         with Pool(cpu_count()) as p:
             p.starmap(lium_score, map_args)
@@ -119,7 +119,7 @@ def main():
             paths[n], n + '_info.csv'), index_col=0) for n in names])
         df_all.to_csv(os.path.join(args.out_dir, 'results.csv'))
 
-    if args.stage > 3:
+    if args.stage >= 4:
         maw_args = [(n, paths[n], args.win_size) for n in names]
         with Pool(cpu_count()) as p:
             dfs = p.starmap(lium_maw, maw_args)
@@ -257,7 +257,7 @@ def lium_score(name, out_dir, out_res=False, hyp_col='hyp',
     Align output of lium_test with reference files and score accordingly
     """
     dfs = lbl2df(data_dir, 1)
-    src = os.path.join(os.path.dirname(dfs.src.iloc[0]), name + '.wav')
+    src = os.path.join(data_dir, name + '.wav')
     ref = dfs.loc[dfs.src == src]
     if len(ref) == 0:
         print('source not found')
@@ -268,7 +268,7 @@ def lium_score(name, out_dir, out_res=False, hyp_col='hyp',
 
     scores = []
     refs = []
-    for key, hyp in df.iterrows():
+    for _, hyp in df.iterrows():
         # get last ref segment that starts before hyp starts
         try:
             begin = ref.loc[ref.start <= hyp.start].iloc[-1]
@@ -287,20 +287,24 @@ def lium_score(name, out_dir, out_res=False, hyp_col='hyp',
         if begin.name == end.name:
             if begin.cls == hyp[hyp_col]:
                 score += hyp.dur
+            refs.append(begin.cls)
         else:
-            if begin.cls == hyp[hyp_col]:
-                score += begin.start + begin.dur - hyp.start
-                refs.append(begin.cls)
-            if end.cls == hyp[hyp_col]:
-                score += hyp.start + hyp.dur - end.start
-                refs.append(end.cls)
-            for n in range(begin.name + 1, end.name):
-                if ref.loc[n, 'cls'] == hyp.hyp:
-                    score += ref.loc[n, 'dur']
+            # if begin.cls == hyp[hyp_col]:
+                # score += begin.start + begin.dur - hyp.start
+                # refs.append(begin.cls)
+            # if end.cls == hyp[hyp_col]:
+                # score += hyp.start + hyp.dur - end.start
+                # refs.append(end.cls)
+            block = ref.loc[begin.name: end.name]
+            dur = block.groupby(block.cls).dur.sum()
+            cls = dur.idxmax()
+            score += dur.loc[cls]
+            refs.append(cls)
+
         scores.append(score)
-        refs.append(begin.cls)
 
     df['score'] = scores
+    assert len(df) == len(refs)
     df['ref'] = refs
     df.score = df.score.astype(int)
     df.ref = df.ref.astype(int)
@@ -359,7 +363,6 @@ def lium_maw(name, out_dir, win_size=3):
     res = pd.read_csv(os.path.join(
         out_dir, name + '_info.csv'), index_col=0)
     res['maw'] = mhyp
-    res.drop('5-best', axis=1, inplace=True)
     res.to_csv(os.path.join(out_dir, name + '_info.csv'))
     return lium_score(name, out_dir, out_res=True,
                       hyp_col='maw', data_dir=args.data_path)

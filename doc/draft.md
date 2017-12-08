@@ -400,8 +400,8 @@ whichever is shorter, and calculate the average score for each speaker in this
 period. The highest scoring speaker is output as the prediction for this
 segment.
 
-The results of the baseline and proposed systems for the 120 second speaker
-model is detailed in Table 3.
+The results of the baseline and proposed systems for the 90, 120, and 150
+second speaker models is detailed in Table 3.
 
 Model Method      SER (%)
 ----  ---------   ------
