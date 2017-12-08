@@ -10,9 +10,11 @@ system is explored, from corpus development to software design and testing.
 The system conducts speaker identification directly on silence separated
 segments and employs a simple averaging post-processing method to boost
 accuracy, resulting in a system with a one utterance latency for predictions.
-Experimentation against a standard baseline offline system resulted in a
-speaker error rate (SER) of 25.5% and *tbd* for the proposed and baseline
-systems, respectively.
+Experimentation against a standard baseline offline system resulted in speaker
+error rates (SER) of 25.5% and 19.3% for the online and offline systems,
+respectively.
+
+*Keywords*: Speaker diarization, Indonesian, online
 
 # 1 Background
 
@@ -22,18 +24,10 @@ is to take audio containing speech from one or more speakers and determine the
 identity of the speaker at any given time. In online speaker diarization, there
 is the additional constraint of producing these identities in a timely manner,
 be it in regular time intervals or at certain speech boundaries. Online speaker
-diarization differs from offline speaker diarizationn mainly in the amount of
+diarization differs from offline speaker diarization mainly in the amount of
 information available for analysis; online diarization makes use of all data
 available up to the current time, whereas for offline diarization data at all
 time points is available.
-
-In general, the diarization process can be broken down into a number of steps.
-In speaker segmentation, the incoming speech is split into segments containing
-speech from a single speaker. In speaker clustering, the segments belonging to
-the same speaker are grouped together. Finally, these groups of segments are
-used to run speaker identification. Additional post-processing methods are used
-to improve predictions, but are often dependent on analysis over the entire
-length of speech, which may be unavailable in advance in the online scenario.
 
 Online speaker diarization is important when real time or close to real time
 information regarding speakers is required. Paired with online speech
@@ -43,7 +37,36 @@ close to real time machine translation and summarization. This research
 describes the process of constructing an online speaker diarization system,
 detailing the corpus development, system design, and experiments.
 
-Many approaches have been taken over
+Offline speaker diarization is well-established, with systems assessed on
+evaluation challenges such as the National Institute of Standards and
+Technology (NIST) Rich Transcription evaluation. Until recently, most of the
+approaches in speaker diarization were centred around the process of
+converging towards an optimum number of clusters corresponding to speakers,
+either from very few clusters (top-down) or from a large number derived from
+speaker segments (bottom-up).
+
+In the more common bottom-up approach, the diarization process can be broken
+down into a number of steps.
+In speaker segmentation, the incoming speech is split into segments containing
+speech from a single speaker. In speaker clustering, the segments belonging to
+the same speaker are grouped together. Finally, these groups of segments are
+used to run speaker identification. Additional post-processing methods are used
+to improve predictions, but are often dependent on analysis over the entire
+length of speech, which may be unavailable in advance in the online scenario.
+This process is illustrated in @Fig:fig1: As seen in the lower picture, the
+incoming signal is split into 5 voiced segments and 1 unvoiced segment, and
+is subsequently clustered to obtain the speaker labels for each segment. In the
+case of speaker identification, the speaker labels are instead the actual
+speaker identities.
+
+![Illustration of diarization process](diarization_wave.svg){#fig:fig1}
+
+Newer systems have adopted the usage of total variability statistics originally
+developed for the speaker verification domain to achieve results comparable
+to the aforementioned approaches while discarding the need for complicated
+back end post-processing. In this approach, the most salient features in the
+low-dimensional i-vector space are extracted and exploited to allow for more
+accurate clusterings.
 
 Diarization error rate (DER) is calculated as the per frame
 
@@ -69,9 +92,57 @@ setting, this is achieved via the following steps:
 3. Cluster segments hierarchically using difference threshold as reference
 
 
-# 2 Online Windowed Speaker Recognition
+# 2 Online Diarization System
 
 ## 2.1 Related research
+
+Several different approaches have been explored in online speaker diarization.
+In a series of papers, Liu et al. explored the adaptation of the standard
+diarization pipeline for online and real time usage. Fast speaker change
+detection is achieved with a phone-class decode followed by Bayesian
+information criterion (BIC) calculation with additional penalty factor @liu1.
+As hierarchical clustering requires knowledge beforehand of all clusters, it is
+implausible to implement in an online setting. Instead, a modification of
+k-means clustering is employed to achieve online clustering @liu2. In this
+approach, new clusters (speakers) are formed whenever a segment is found to be
+sufficiently distant from any existing cluster means, whereas existing cluster
+means are continuously updated with incoming data. Online speaker adaptation
+and identification are discussed in @liu3, where Maximum Likelihood Linear
+Regression (MLLR) is used to adapt existing clusters and to accumulate
+statistics for the identification of subsequent segments. In this approach, no
+prior knowledge regarding the number of speakers of speaker characteristics is
+necessary.
+
+With the capabilities of modern graphic processing units (GPU), it is possible
+to approach the diarization problem in a brute-force manner, by offloading most
+computationally expensive tasks to the GPU. In @friedland, all of the standard
+offline steps are reproduced for each incoming block of data, but as the GPU is
+able to process at thousands of times the rate of real time, it is essentially
+real time.
+
+## 2.2 Design and Analysis
+
+As is often the case with under-resourced languages, the hardware available for
+processing and research is similarly under-resourced. Hence, computationally
+intensive approaches may be difficult to implement on large datasets
+For instance, the training of i-vector extractors for speaker identification is
+prohibitively time-consuming on lower-end commodity hardware. Similarly,
+adequate GPUs for DNN training and other GPU-based approaches may be
+unavailable. Due to these limitations, the development of a relatively
+computationally efficient speaker diarization system, both in terms of training
+and subsequent deployment, is a requirement for this research.
+
+In addition, the diarization system should be easily integrated into existing
+workflows. Specifically, the system should act as middleware to a real time
+signal processing pipeline. In this way, the low-level specifics of signal
+input/output and communication are handled by the pipeline framework. This also
+allows for greater extensibility of the system to related functionality, such
+as speech recognition, machine translation, or automatic summarization. An
+example of the finished system is shown in @Fig:fig2.
+
+## 2.3 Windowed average predictions
+
+The
 
 
 # 3 Corpus Development
@@ -118,7 +189,7 @@ the council will discuss the issue.
 for instance with regards to scheduling future meetings, deadlines, diplomatic
 visits to various regions, et cetera.
 
-An overview of the meetings is presented in *table*.
+An overview of the meetings is presented in @Table:tbl1.
 
 Meeting ID        Topic                         Type
 ---------------   ----------------------------  ------------
@@ -136,6 +207,8 @@ Meeting ID        Topic                         Type
 44                Land dispute                  Conflict
 45,127            Agriculture ministry          Summon
 53,57             National planning             Discussion
+
+: Meetings information {#tbl:tbl1}
 
 ## 3.2 Pre-processing
 
@@ -192,10 +265,10 @@ label speakers consistently across meetings.
 manually edited in step 6.
 
 In this way, the reference was iteratively improved until mislabeled
-speakers were no longer encountered. Figure 1 illustrates this process, with
+speakers were no longer encountered. @Fig:fig2 illustrates this process, with
 data elements and processes depicted in rectangles and ellipses, respectively.
 
-![Data flow diagram for experiment baseline](dfd_baseline.png)
+![Data flow diagram for experiment baseline](dfd_baseline.png){#fig:fig2}
 
 In total, 236 speakers were identified. Due to the cross-checking method above,
 though, speakers with a lack of training data could not be verified, and there
@@ -204,6 +277,7 @@ speech, discounting silence, noise, and overlapping speaker segments. On
 average, each speaker has around 653.1 seconds of speech. However, due to the
 moderated nature of the meetings a small number of speakers contributed a large
 part of the recorded speech.
+
 
 
 # 4 Experiment and Results
@@ -253,10 +327,12 @@ Training data (s)   SER (%)   # Speakers
 150                 10.15     138
 180                 11.65     123
 
+: Speaker model validation {#tbl:tbl2}
+
 There is a difference between speaker model training on a corpus and training
 through speaker enrollment. When training on a corpus, as the amount of
 training data per speaker is increased, a larger proportion of speakers can no
-longer be trained and tested. This is noted in Table 2, which notes the number
+longer be trained and tested. This is noted in @Tbl:tbl2, which notes the number
 of speakers trained and tested. Also, whereas in this case the speech taken for
 each speaker's training is from the very beginning of their turns, in speaker
 enrollment we have the opportunity to obtain speech according to our specific
@@ -282,7 +358,15 @@ cepstral mean normalization (CMS), and variance normalization are applied on a
 and silence segments.
 3. GLR-based segmentation followed by linear and hierarchical clustering of
 resulting speaker segments.
-4.
+4. Segment adjustment by modeling the speaker clusters as Gaussian mixtures
+models (GMM) and running Viterbi decoding.
+
+In the standard setup, these steps are succeeded by segmentation into speech
+and non-speech areas and gender/bandwidth detection. However, these steps were
+omitted in this setup as they were unnecessary; non-speech is labeled as noise
+in the corpus and gender/bandwidth was irrelevant for the scope of the study.
+Instead, the re-segmented portions were used to evaluate the accuracy of the
+system.
 
 The system is evaluated by decoding and identifying the corpus assembled in
 Section 3, with the results displayed in Table 3. It should be noted that
@@ -293,14 +377,14 @@ system.
 ## 4.3 Proposed Method
 
 The online system implements a simple voice activity detector (VAD) to detect
-the beginning and ending of utterances, splitting the incoming audio stream
+the beginnings and endings of utterances, splitting the incoming audio stream
 into a separate segment whenever voice activity is not detected. LIUM toolkit
 is then used to run speaker identification on the segment against the speaker
 model obtained in Section 4.1. For the current utterance, the system outputs
 the most likely speaker calculated over a sliding window. The online system is
-illustrated in *Figure 3*.
+illustrated in @Fig:fig3.
 
-![Data flow diagram for proposed system](dfd_online.png)
+![Data flow diagram for proposed system](dfd_online.png){#fig:fig3}
 
 In detail, the process can be broken down into the following steps:
 1. Analyze the incoming audio stream to detect voice activity.
@@ -319,10 +403,28 @@ segment.
 The results of the baseline and proposed systems for the 120 second speaker
 model is detailed in Table 3.
 
-Method      SER (%)
----------   ------
-Baseline
-Proposed
+Model Method      SER (%)
+----  ---------   ------
+90    base
+      3-win
+      5-win
+120   base
+      3-win
+      5-win
+150   base
+      3-win
+      5-win
+
+Of note, the results of baseline system evaluation are consistently superior to
+the proposed system. The simplicity of the speaker segmentation method employed
+in the proposed system results in often inaccurate segments, specifically
+during periods of back and forth conversation. This is mitigated somewhat by
+the windowing method used, which on average results in a small improvement in
+accuracy. However, accuracy improvements quickly subside with larger window
+sizes. Furthermore, this method breaks down in more dynamic conversations,
+where speaker turns occur more rapidly.
 
 
 # 6 Conclusion
+
+
