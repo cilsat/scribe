@@ -1,0 +1,16 @@
+source:
+  name: "pulsesrc"
+plug1:
+  name: "audioconvert"
+plug2:
+  name: "audioresample"
+caps:
+  name: "capsfilter"
+  caps: "audio/x-raw,format=S16LE,rate=16000,channels=1"
+test:
+  name: "splitsilence"
+  split_thr: 3
+  energy_thr: -15.0
+  out_dir: "/tmp"
+sink:
+  name: "autoaudiosink"

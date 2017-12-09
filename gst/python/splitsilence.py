@@ -15,13 +15,13 @@ from tempfile import mkstemp
 
 import gi
 gi.require_version('GstBase', '1.0')
-from gi.repository import Gst, GLib, GObject, GstBase
+from gi.repository import Gst, GObject, GstBase
 
 Gst.init(None)
 caps = 'audio/x-raw,format=S16LE,rate=16000,channels=1'
 
 
-class SplitSilence(GstBase.BaseTransform):
+class GstPlugin(GstBase.BaseTransform):
     __gstmetadata__ = ('SplitSilence Python',
                        'Transform',
                        'Split buffer into files at silence',
@@ -70,13 +70,19 @@ class SplitSilence(GstBase.BaseTransform):
         self.props = {
             'split_thr': 3,
             'energy_thr': -15,
-            'out_dir': './splits'
+            'out_dir': '/tmp'
         }
         self.samplerate = 16000
         self.blk_q = Queue()
         self.sentinel = object()
         self.print_t = Thread(target=self.split_file, args=())
         self.print_t.start()
+
+    def set_property(self, prop, val):
+        self.props[prop] = val
+
+    def get_property(self, prop):
+        return self.props[prop]
 
     def do_set_property(self, prop, val):
         if prop.name == 'split_thr':
@@ -96,6 +102,11 @@ class SplitSilence(GstBase.BaseTransform):
             val = self.props['out_dir']
 
     def do_transform_ip(self, buf):
+        """
+        This function is automatically called by Gst at each iteration. As the
+        block data cannot be written back into stream, we must instead queue it
+        and use it from a different thread.
+        """
         # Gst.info("timestamp(buffer):%s" % (Gst.TIME_ARGS(buf.pts)))
         res, map = buf.map(Gst.MapFlags.READ)
         assert res
@@ -127,7 +138,7 @@ class SplitSilence(GstBase.BaseTransform):
         # level in dB below which a block is considered silent
         energy_thr = 10**(0.1 * self.props['energy_thr']) * 32768
         # directory to place split files
-        out_dir = '/home/cilsat/dev/scribe/test/splits/m0002-0'
+        out_dir = self.props['out_dir']
         # list to store audio buffer
         buf = []
 
@@ -153,5 +164,5 @@ class SplitSilence(GstBase.BaseTransform):
                 buf.extend(blk)
 
 
-GObject.type_register(SplitSilence)
-__gstelementfactory__ = ("splitsilence", Gst.Rank.NONE, SplitSilence)
+GObject.type_register(GstPlugin)
+__gstelementfactory__ = ("splitsilence", Gst.Rank.NONE, GstPlugin)

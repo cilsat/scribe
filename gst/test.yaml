@@ -1,0 +1,12 @@
+source:
+  name: "filesrc"
+  location: "/home/cilsat/dev/scribe/test/splits/120/m0021-2/m0021-2_173139.wav"
+plug1:
+  name: "wavparse"
+test:
+  name: "splitsilence"
+  split_thr: 3
+  energy_thr: -15.0
+  out_dir: "/tmp"
+sink:
+  name: "autoaudiosink"

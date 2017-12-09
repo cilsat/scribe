@@ -95,7 +95,7 @@ def main():
     names = [n.split('.')[0] for n in os.listdir(args.data_path)
              if n.endswith('.lbl')]
 
-    # names = ['m0057-0']
+    # names = ['m0044-0']
 
     paths = {n: os.path.join(args.out_dir, n) for n in names}
 
