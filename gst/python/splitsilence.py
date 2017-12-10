@@ -75,8 +75,8 @@ class GstPlugin(GstBase.BaseTransform):
         self.samplerate = 16000
         self.blk_q = Queue()
         self.sentinel = object()
-        self.print_t = Thread(target=self.split_file, args=())
-        self.print_t.start()
+        print_t = Thread(target=self.split_file, args=())
+        print_t.start()
 
     def set_property(self, prop, val):
         self.props[prop] = val
@@ -109,7 +109,6 @@ class GstPlugin(GstBase.BaseTransform):
         """
         # Gst.info("timestamp(buffer):%s" % (Gst.TIME_ARGS(buf.pts)))
         res, map = buf.map(Gst.MapFlags.READ)
-        assert res
         self.blk_q.put(map.data)
 
         return Gst.FlowReturn.OK
