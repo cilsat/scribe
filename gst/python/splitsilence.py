@@ -14,6 +14,7 @@ import soundfile as sf
 from tempfile import mkstemp
 
 import gi
+gi.require_version('Gst', '1.0')
 gi.require_version('GstBase', '1.0')
 from gi.repository import Gst, GObject, GstBase
 

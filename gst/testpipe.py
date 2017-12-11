@@ -35,18 +35,16 @@ class Pipeliner:
         Prepare Gst pipeline from specified yaml config file.
         """
         prev_element = None
-        for field in cfg.values():
-            for k, v in zip(field.keys(), field.values()):
-                # make element if non-test plugin
-                if k == 'name':
-                    if v != self.plugin:
-                        element = Gst.ElementFactory.make(v)
-                    else:
-                        plugin_module = import_module(
-                            'gst.python.' + self.plugin)
-                        element = plugin_module.GstPlugin()
+        for plugin, props in cfg.items():
+            # make element if non-test plugin
+            if plugin != self.plugin:
+                element = Gst.ElementFactory.make(plugin)
+            else:
+                plugin_module = import_module('gst.python.' + self.plugin)
+                element = plugin_module.GstPlugin()
+            for k, v in props.items():
                 # add exception for pesky caps and set properties
-                elif k == 'caps':
+                if k == 'caps':
                     element.set_property(k, Gst.caps_from_string(v))
                 else:
                     element.set_property(k, v)
