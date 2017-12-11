@@ -6,6 +6,7 @@ from numpy.linalg import norm
 from multiprocessing import Pool, cpu_count
 from subprocess import run, PIPE
 
+
 def apply_parallel(func, args):
     """
     Parallelize functions applied to dataframe groups for python 3.
@@ -15,6 +16,7 @@ def apply_parallel(func, args):
     with Pool(cpu_count()) as p:
         ret = p.starmap(func, args)
     return pd.concat(ret)
+
 
 def lb_keough_md(x, y, r=40):
     """
@@ -30,9 +32,12 @@ def lb_keough_md(x, y, r=40):
         win = b[(n - r if n - r >= 0 else 0):(n + r)]
         lb = win.min()
         ub = win.max()
-        if i > ub: lb_sum += (i - ub)**2
-        elif i < lb: lb_sum += (i - lb)**2
+        if i > ub:
+            lb_sum += (i - ub)**2
+        elif i < lb:
+            lb_sum += (i - lb)**2
     return lb_sum**0.5
+
 
 def lb_keough(x, y, r=40):
     """
@@ -44,7 +49,16 @@ def lb_keough(x, y, r=40):
         win = y[(n - r if n - r >= 0 else 0):(n + r)]
         lb = min(win)
         ub = max(win)
-        if i > ub: lb_sum += (i - ub)**2
-        elif i < lb: lb_sum += (i - lb)**2
+        if i > ub:
+            lb_sum += (i - ub)**2
+        elif i < lb:
+            lb_sum += (i - lb)**2
     return lb_sum**0.5
 
+
+def static_vars(**kwargs):
+    def decorate(func):
+        for k in kwargs:
+            setattr(func, k, kwargs[k])
+        return func
+    return decorate
