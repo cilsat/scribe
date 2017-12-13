@@ -17,7 +17,8 @@ class Detector(object):
 
     @classmethod
     def is_silent(cls, block, energy_thr=10.0, sil_len_thr=5):
-        rms = np.sqrt(np.mean(block**2))
+        # rms = np.sqrt(np.mean(block**2))
+        rms = np.mean(block)
         if rms < energy_thr:
             cls._sil_sum += 1
             if cls._can_split and cls._sil_sum > sil_len_thr:
@@ -67,18 +68,19 @@ class Segmentor:
         self.can_split = False
 
     def segment_block(self, is_silent=Detector.is_silent,
-                      is_turn=Detector.is_turn, on_split=None):
+                      is_turn=Detector.is_turn, on_split=None, energy_thr=-10, sil_len_thr=0.5):
         if on_split is None:
             on_split = self.on_split
 
-        energy_thr = 10**(0.1 * -20.0)
+        energy_thr = 10**(0.1 * -10.0)
+        sil_len_thr = int(sil_len_thr * self.samplerate / self.blocksize)
         sample_buffer = []
 
         for n, block in enumerate(self.data_iter):
             frames = mfcc(block, self.samplerate)
             sample_buffer.extend(block)
 
-            if is_turn(frames):
+            if is_silent(frames[:, 0], energy_thr, sil_len_thr):
                 on_split(sample_buffer)
                 sample_buffer = []
 

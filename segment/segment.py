@@ -25,10 +25,13 @@ def cusum(z):
 
 
 def glr(x, y, theta=1.82):
-    xm = mn.logpdf(x, np.mean(x, axis=0), np.cov(x, rowvar=False))
-    ym = mn.logpdf(y, np.mean(y, axis=0), np.cov(y, rowvar=False))
+    xm = multivariate_normal.logpdf(
+        x, np.mean(x, axis=0), np.cov(x, rowvar=False))
+    ym = multivariate_normal.logpdf(
+        y, np.mean(y, axis=0), np.cov(y, rowvar=False))
     z = np.vstack((x, y))
-    zm = mn.logpdf(z, np.mean(z, axis=0), np.cov(z, rowvar=False))
+    zm = multivariate_normal.logpdf(
+        z, np.mean(z, axis=0), np.cov(z, rowvar=False))
     return (np.sum(zm) - np.sum(np.hstack((xm, ym)))) / len(z)**theta
 
 
