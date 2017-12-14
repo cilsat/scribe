@@ -7,12 +7,12 @@ given an ongoing conversation or audio stream, in contrast to the offline
 scenario where the conversation has concluded and the entire file is available.
 The process of constructing an Indonesian language online speaker diarization
 system is explored, from corpus development to software design and testing.
-The system conducts speaker identification directly on silence separated
-segments and employs a simple averaging post-processing method to boost
-accuracy, resulting in a system with a one utterance latency for predictions.
-Experimentation against a standard baseline offline system resulted in speaker
-error rates (SER) of 25.5% and 19.3% for the online and offline systems,
-respectively.
+The system conducts speaker identification directly on low-energy separated
+segments and employs a rolling window of time-weighted average likelihoods to
+improve accuracy, resulting in a system with a latency of one speaker segment
+for predictions. Experimentation against a standard baseline offline system
+resulted in speaker error rates (SER) of 25.5% and 19.3% for the proposed
+online and baseline offline systems, respectively.
 
 *Keywords*: Speaker diarization, Indonesian, online
 
@@ -148,33 +148,69 @@ functionality, lacks an online diarization component. The system developed for
 this research essentially extends the aforementioned systems to allow for
 functional online diarization.
 
-To achieve this, a custom GStreamer plugin is developed for speaker
+## 2.3 Online speaker segmentation
+
+For online diarization, a custom GStreamer plugin is developed for speaker
 segmentation, separating the input audio stream at low energy points in the
-signal, with BIC, GLR, and KL criteria for splitting to follow. Speaker
-segments obtained this way are then run through the LIUM speaker identification
-program and the most likely speaker predicted. Provided the
-segmentation is reasonably accurate, we show that forgoing the clustering step
-and directly running speaker identification on speaker segments leads to
-performance gains at a low cost to identification accuracy.
+signal. In this method, features are extracted from audio blocks and the log
+energy portion of the resulting frames are analyzed. If the average energy is
+below a specified threshold, the block is considered silent. After a specified
+number of blocks of silence have passed, the audio blocks buffered up to that
+point are segmented.
 
-## 2.3 Windowed average predictions
+The energy threshold portion of the algorithm depends on the signal-to-noise
+ratio (SNR) of the acoustic environment which is relatively static, and can be
+set according to the conditions of the environment beforehand. The silence
+length threshold (denoting the number of consecutive silent blocks to
+tolerate), on the other hand, is easily disrupted in cases where speakers
+interrupt each other regularly in conversations. Hence, a number of different
+methods for speaker segmentation were also tested, namely Kullback-Liebler (KL
+or KL2) @siegler1997 and penalized Generalized Likelihood Ration (GLR)
+thresholding @delacourt1999, which are not solely influenced by energy.
 
-Direct speaker identification on speaker segments is problematic in that the
-amount of information available for analysis is inconsistent due to the varying
-lengths of segments. Additionally, by considering only the current segment, we
-are discarding information from the prediction of previous segments. A simple
-post-processing method that takes advantage of previous information is the
-averaged window of *n* past segments. For each segment identified, all scores
-are stored. In addition to the scores for the current segment, the speaker
-scores for the last *n* segments are then averaged and time-weighted to obtain
-the final speaker prediction.
+Segments obtained this way are then run through the LIUM speaker identification
+program and the most likely speaker predicted. Provided the segmentation is
+reasonably accurate, directly running speaker identification on speaker
+segments while forgoing the clustering step leads to time performance gains at
+a low cost to identification accuracy.
 
-A variation on this is to average the scores for the last *n frames* instead of
-segments. This leads to more consistent time performance, at the cost of lost
-information due to the ignored segment boundaries. In either case, the value of
-*n* must be determined empirically, and is closely related to the nature of the
-audio stream being analyzed; in general, this method is effective for streams
-where speaker changes occur rarely.
+## 2.4 Windowed average predictions
+
+There are a number of shortcomings to direct speaker identification on speaker
+segments, stemming primarily from the low amount of audio data available for
+analysis at any given segment. By considering only the current segment, we
+are also discarding information from the prediction of previous segments. This
+often results in noisy predictions, with correctly identified longer segments
+interspersed with misidentified short segments.
+
+A simple post-processing method is devised to partially alleviate this problem,
+which involves calculating the most likely speaker within a rolling window of
+segments. The process is illustrated in greater detail in @Fig:window.
+The window to be considered consists of the segment at the current time _t_ and
+the _n - 1_ segments preceding it. The speaker likelihoods _S_ for each segment in
+the window are weighted against the length _l_ of the segment. These time-weighted
+scores are then summed across the segments of the window for each speaker; the
+speaker with the highest score is the prediction for the current segment.
+
+![Time-weighted average rolling window](window.png){#fig:pipeline}
+
+It is important to discard speaker likelihoods beyond a specified number of
+segments, as global time-weighted average scores are necessarily biased towards
+speakers who have spoken more overall. The size of the rolling window is
+therefore an important heuristic, signifying the amount of local context to
+consider; too large a value and short speaker turns may be missed, while too
+small a value negates the benefits of applying a window in the first place.
+Empirically, a window of size three lead to a sizeable increase in accuracy for
+the tested corpus.
+
+Although this method provides an easy boost to accuracy at low computational
+cost, more sophisticated methods such as batched k-means clustering or newer
+methods such as time-delay neural networks (TDNN) and long short-term memory
+(LSTM) networks are likely to produce better results, as they have the
+advantage of considering all previous data instead of the data within a small
+window. A hybrid diarization/identification system is also plausible, with
+an existing speaker model used as cluster initializations for a Dirichlet
+Process Gaussian Mixture Model (DPGMM) of speakers.
 
 
 # 3 Corpus Development
@@ -414,7 +450,7 @@ because the speaker model itself is built from this data, portions of the
 training data are evaluated by the system. This equally applies to the online
 system.
 
-## 4.4 Proposed Method
+## 4.4 Proposed System
 
 The online system implements a simple voice activity detector (VAD) to detect
 the beginnings and endings of utterances, splitting the incoming audio stream
@@ -465,7 +501,7 @@ sizes. Furthermore, this method breaks down in more dynamic conversations,
 where speaker turns occur more rapidly.
 
 
-# 6 Conclusion
+# 5 Conclusion
 
 In this research, the development of an Indonesian language diarization corpus
 and the construction of an online speaker diarization system is explored in
