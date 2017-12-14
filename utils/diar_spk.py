@@ -3,12 +3,29 @@
 import os
 import sys
 import pandas as pd
+from argparse import ArgumentParser
 from multiprocessing import Pool, cpu_count
 from lium_utils import seg2df, lbl2seg, lbl2df, id2df
 from identify_spk import test
 
+lium_path = '/home/cilsat/downloads/bin/lium_spkdiarization-8.4.1.jar'
+sgmm_path = '/home/cilsat/data/speech/rapat/gmm/120s_all_r2/spk.gmm'
+ubm_path = '/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm'
+ref_dir = '/home/cilsat/data/speech/rapat/used'
+hyp_dir = '/home/cilsat/data/speech/rapat/diarize'
 
-def main(ref_dir, hyp_dir):
+parser = ArgumentParser(description='Script to run LIUM speaker identification\
+        on segments diarized using LIUM.')
+parser.add_argument('--lium', type=str, default=lium_path)
+parser.add_argument('--sgmm', type=str, default=sgmm_path)
+parser.add_argument('--ubm', type=str, default=ubm_path)
+parser.add_argument('--ref', type=str, default=ref_dir)
+parser.add_argument('--hyp', type=str, default=hyp_dir)
+parser.add_argument('--stage', type=int, default=1)
+args = parser.parse_args()
+
+
+def main(ref_dir=args.ref, hyp_dir=args.hyp):
     refs = lbl2df(ref_dir, 1)
     srcs = refs.src.unique()
 
@@ -18,20 +35,22 @@ def main(ref_dir, hyp_dir):
     hyp_ins = [os.path.join(hyp_dir, os.path.join(
         n, n + '.spl.3.seg')) for n in names]
 
-    # with Pool(cpu_count()) as pool:
-    # pool.starmap(proc, zip(names, srcs, ref_dfs, hyp_ins))
+    if args.stage <= 1:
+        with Pool(cpu_count()) as pool:
+            pool.starmap(proc, zip(names, srcs, ref_dfs, hyp_ins))
 
-    score = 0
-    total = 0
-    for h, ref in zip(hyp_ins, ref_dfs):
-        hyp_out = h.replace('.3.', '.out.')
-        hyp = id2df(hyp_out)
-        join = pd.concat(
-            (hyp.set_index('start'), ref.set_index('start')), axis=1).dropna()
-        score += join.loc[join.cls == join.lbl, 'dur'].sum()
-        total += join.dur.sum()
+    if args.stage <= 2:
+        score = 0
+        total = 0
+        for h, ref in zip(hyp_ins, ref_dfs):
+            hyp_out = h.replace('.3.', '.out.')
+            hyp = id2df(hyp_out)
+            join = pd.concat(
+                (hyp.set_index('start'), ref.set_index('start')), axis=1).dropna()
+            score += join.loc[join.cls == join.lbl, 'dur'].sum()
+            total += join.dur.sum()
 
-    print(score / total)
+        print(score / total)
 
     # with Pool(cpu_count()) as pool:
     # res = pool.starmap(eval, zip(hyp_ins, ref_dfs))
@@ -44,8 +63,8 @@ def main(ref_dir, hyp_dir):
 
 def proc(name, src, ref_df, hyp_in):
     hyp_out = hyp_in.replace('.3.', '.out.')
-    test('/home/cilsat/down/prog/lium_spkdiarization-8.4.1.jar', hyp_in, src, hyp_out, '/home/cilsat/data/speech/rapat/gmm/150s_all_r1/spk.gmm',
-         '/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm', name, hyp_in.replace('seg', 'log'))
+    test(lium_path, hyp_in, src, hyp_out, sgmm_path, ubm_path, name,
+         hyp_in.replace('seg', 'log'))
 
 
 def eval(hyps, ref):
@@ -86,5 +105,4 @@ def eval(hyps, ref):
 
 
 if __name__ == "__main__":
-    main('/home/cilsat/data/speech/rapat',
-         '/home/cilsat/data/speech/rapat/diar')
+    main()
