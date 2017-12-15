@@ -21,6 +21,7 @@ parser.add_argument('--sgmm', type=str, default=sgmm_path)
 parser.add_argument('--ubm', type=str, default=ubm_path)
 parser.add_argument('--ref', type=str, default=ref_dir)
 parser.add_argument('--hyp', type=str, default=hyp_dir)
+parser.add_argument('--exp', type=str, default='120s')
 parser.add_argument('--stage', type=int, default=1)
 args = parser.parse_args()
 
@@ -43,7 +44,7 @@ def main(ref_dir=args.ref, hyp_dir=args.hyp):
         score = 0
         total = 0
         for h, ref in zip(hyp_ins, ref_dfs):
-            hyp_out = h.replace('.3.', '.out.')
+            hyp_out = h.replace('.3.', '.' + args.exp + '.')
             hyp = id2df(hyp_out)
             join = pd.concat(
                 (hyp.set_index('start'), ref.set_index('start')), axis=1).dropna()
@@ -62,13 +63,13 @@ def main(ref_dir=args.ref, hyp_dir=args.hyp):
 
 
 def proc(name, src, ref_df, hyp_in):
-    hyp_out = hyp_in.replace('.3.', '.out.')
-    test(lium_path, hyp_in, src, hyp_out, sgmm_path, ubm_path, name,
+    hyp_out = hyp_in.replace('.3.', '.' + args.exp + '.')
+    test(args.lium, hyp_in, src, hyp_out, args.sgmm, args.ubm, name,
          hyp_in.replace('seg', 'log'))
 
 
 def eval(hyps, ref):
-    df = id2df(hyps.replace('.3.', '.out.'))
+    df = id2df(hyps.replace('.3.', '.' + args.exp + '.'))
     scores = []
     refs = []
 
