@@ -98,7 +98,7 @@ Several different approaches have been explored in online speaker diarization.
 In a series of papers, Liu et al. explored the adaptation of the standard
 diarization pipeline for online and real time usage. Fast speaker change
 detection is achieved with a phone-class decode followed by Bayesian
-information criterion (BIC) calculation with additional penalty factor @liu1.
+information criterion (BIC) calculation with additional penalty factor (@liu1).
 As hierarchical clustering requires knowledge beforehand of all clusters, it is
 implausible to implement in an online setting. Instead, a modification of
 k-means clustering is employed to achieve online clustering @liu2. In this
@@ -113,7 +113,8 @@ necessary.
 
 With the capabilities of modern graphic processing units (GPU), it is possible
 to approach the diarization problem in a brute-force manner, by offloading most
-computationally expensive tasks to the GPU. In @friedland, all of the standard
+computationally expensive tasks to the GPU. In @friedland2012, all of the
+standard
 offline steps are reproduced for each incoming block of data, but as the GPU is
 able to process at thousands of times the rate of real time, it is essentially
 real time.
@@ -192,7 +193,7 @@ the window are weighted against the length _l_ of the segment. These time-weight
 scores are then summed across the segments of the window for each speaker; the
 speaker with the highest score is the prediction for the current segment.
 
-![Time-weighted average rolling window](window.png){#fig:pipeline}
+![Time-weighted average rolling window](window.png){#fig:window}
 
 It is important to discard speaker likelihoods beyond a specified number of
 segments, as global time-weighted average scores are necessarily biased towards
@@ -299,10 +300,11 @@ and occasionally punctured by long stretches of silence.
 The annotation of training data was conducted in a semi-supervised and
 iterative manner. This was due mainly to the difficulty of identifying speakers
 across meetings, and also to reduce the time-costly manual labeling of speaker
-segment boundaries. The LIUM speaker diarization toolkit was utilized for most
+segment boundaries. The LIUM speaker diarization toolkit @rouvier2013
+@meignier2009 was utilized for most
 of the training, specifically for speaker modeling and identification and the
 initial speaker clustering and labeling. Various Python scripts were also
-utilized to ease the task of annotation and data analysis.
+utilized for feature extraction @torfi2017, annotation and data analysis.
 
 A single speaker clustering run was conducted on the pre-processed audio to
 obtain the initial predictions for speaker segment boundaries and speaker
@@ -487,13 +489,15 @@ Model Method      SER (%)
 ----  ---------   ------
 90    online      38.21
       3-win       30.76
-      base
+      5-win       29.92
+      base        21.05
 120   online      34.93
       3-win       27.03
       5-win       25.52
       base        18.48
 150   online      31.41
       3-win       24.60
+      5-win       24.92
       base        19.59
 
 Of note, the results of baseline system evaluation are consistently superior to
@@ -525,3 +529,5 @@ speaker model derived from 150 seconds of user speech, the online system with
 a 3-segment window produced a SER of 24.6% compared to 19.59% for the baseline
 system.
 
+
+# 6 Bibliography
