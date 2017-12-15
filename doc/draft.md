@@ -198,8 +198,10 @@ It is important to discard speaker likelihoods beyond a specified number of
 segments, as global time-weighted average scores are necessarily biased towards
 speakers who have spoken more overall. The size of the rolling window is
 therefore an important heuristic, signifying the amount of local context to
-consider; too large a value and short speaker turns may be missed, while too
+consider; too large a value misses short speaker turns, while too
 small a value negates the benefits of applying a window in the first place.
+The window size should ideally be set according to the median amount of
+segments spoken per speaker. Unfortunately, this cannot be known a priori.
 Empirically, a window of size three lead to a sizeable increase in accuracy for
 the tested corpus.
 
@@ -370,8 +372,9 @@ segments is necessary.
 
 ## 4.2 Speaker Model
 
-The speaker model was built using various amounts of training data from the
-cleaned corpus, with baseline testing conducted on the remainder of the data.
+The speaker model was built using various amounts of speaker training data from
+the corpus, with validation testing conducted on the remainder of the speaker's
+data.
 It is desirable to use the minimum amount of speech per speaker in training the
 speaker model, as this correlates to a shorter enrollment time in real life
 usage. Hence, speaker models using 60, 90, and 120 seconds of training data per
@@ -379,7 +382,7 @@ speaker were trained and tested. For each of these models, the steps are as
 follows:
 
 1. For each speaker in the cleaned corpus, determine whether enough speech data
-is available for training the given speaker. If a speaker has spoken for less
+is available for training; if a speaker has spoken for less
 than 60, 90, or 120 seconds throughout the entire corpus, they are excluded
 from training *and* testing.
 2. If enough data is available, set aside the first 60, 90, or 120 seconds of
@@ -439,7 +442,8 @@ models (GMM) and running Viterbi decoding.
 
 In the standard setup, these steps are succeeded by segmentation into speech
 and non-speech areas and gender/bandwidth detection. However, these steps were
-omitted in this setup as they were unnecessary; non-speech is labeled as noise
+omitted in this setup as they were deemed unnecessary; non-speech is labeled as
+noise
 in the corpus and gender/bandwidth was irrelevant for the scope of the study.
 Instead, the re-segmented portions were used to evaluate the accuracy of the
 system.
@@ -486,7 +490,8 @@ Model Method      SER (%)
       base
 120   online      34.93
       3-win       27.03
-      base
+      5-win       25.52
+      base        18.48
 150   online      31.41
       3-win       24.60
       base        19.59
