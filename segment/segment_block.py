@@ -68,11 +68,12 @@ class Segmentor:
         self.can_split = False
 
     def segment_block(self, is_silent=Detector.is_silent,
-                      is_turn=Detector.is_turn, on_split=None, energy_thr=-10, sil_len_thr=0.75):
+                      is_turn=Detector.is_turn, on_split=None, energy_thr=-10,
+                      sil_len_thr=0.75):
         if on_split is None:
             on_split = self.on_split
 
-        #energy_thr = 10**(0.1 * energy_thr)
+        # energy_thr = 10**(0.1 * energy_thr)
         sil_len_thr = int(sil_len_thr * self.samplerate / self.blocksize)
         print(sil_len_thr)
         sample_buffer = []

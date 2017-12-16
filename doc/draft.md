@@ -1,11 +1,13 @@
-# Building an Indonesian Language Online Speaker Diarization System
+% Average Window Smoothing for an Indonesian Language Online Speaker Identification System
+% Cil Hardianto Satriawan; Dessi Puji Lestari
+% School of Electrical Engineering and Informatics, Institut Teknologi Bandung
 
 # Abstract
 
 Online speaker diarization is the process of determining 'who spoke when'
 given an ongoing conversation or audio stream, in contrast to the offline
 scenario where the conversation has concluded and the entire file is available.
-The process of constructing an Indonesian language online speaker diarization
+The process of constructing an Indonesian language online speaker identification
 system is explored, from corpus development to software design and testing.
 The system conducts speaker identification directly on low-energy separated
 segments and employs a rolling window of time-weighted average likelihoods to
@@ -14,19 +16,19 @@ for predictions. Experimentation against a standard baseline offline system
 resulted in speaker error rates (SER) of 25.5% and 19.3% for the proposed
 online and baseline offline systems, respectively.
 
-*Keywords*: Speaker diarization, Indonesian, online
+*Keywords*: Speaker identification, Indonesian, online, average window
 
 # 1 Background
 
 Speaker diarization is the process of determining 'who spoke when', for
-instance in a conference or interview setting. The task of speaker diarization
+instance in a conference or interview setting. The task of speaker identification
 is to take audio containing speech from one or more speakers and determine the
-identity of the speaker at any given time. In online speaker diarization, there
+identity of the speaker at any given time. In online speaker identification, there
 is the additional constraint of producing these identities in a timely manner,
 be it in regular time intervals or at certain speech boundaries. Online speaker
-diarization differs from offline speaker diarization mainly in the amount of
-information available for analysis; online diarization makes use of all data
-available up to the current time, whereas for offline diarization data at all
+identification differs from offline speaker identification mainly in the amount of
+information available for analysis; online identification makes use of all data
+available up to the current time, whereas for offline identification data at all
 time points is available.
 
 Online speaker diarization is important when real time or close to real time
@@ -89,6 +91,11 @@ setting, this is achieved via the following steps:
 2. Specify a difference metric as the basis for clustering
 3. Cluster segments hierarchically using difference threshold as reference
 
+The remainder of this study is organized as follows: Section 2 discusses
+related research and the design of the system to be built, Section 3 describes
+the process of building the speaker corpus, and Section 4 discusses the
+experimental setup and results.
+
 
 # 2 Online Diarization System
 
@@ -98,10 +105,10 @@ Several different approaches have been explored in online speaker diarization.
 In a series of papers, Liu et al. explored the adaptation of the standard
 diarization pipeline for online and real time usage. Fast speaker change
 detection is achieved with a phone-class decode followed by Bayesian
-information criterion (BIC) calculation with additional penalty factor (@liu1).
+information criterion (BIC) calculation with additional penalty factor in @liu1.
 As hierarchical clustering requires knowledge beforehand of all clusters, it is
 implausible to implement in an online setting. Instead, a modification of
-k-means clustering is employed to achieve online clustering @liu2. In this
+k-means clustering is employed to achieve online clustering in @liu2. In this
 approach, new clusters (speakers) are formed whenever a segment is found to be
 sufficiently distant from any existing cluster means, whereas existing cluster
 means are continuously updated with incoming data. Online speaker adaptation
@@ -143,7 +150,7 @@ example of the finished system is shown in @Fig:pipeline.
 
 The Perisalah system, an Indonesian language speech recognition system, was
 chosen as the starting point for its functional online component, developed
-from the Kaldi GStreamer Server @alumae2014. The Transcriber application
+from the Kaldi GStreamer Server by @alumae2014. The Transcriber application in
 @rahman2017, developed from the Kaldi Offline Transcriber, although similar in
 functionality, lacks an online diarization component. The system developed for
 this research essentially extends the aforementioned systems to allow for
@@ -166,8 +173,8 @@ length threshold (denoting the number of consecutive silent blocks to
 tolerate), on the other hand, is easily disrupted in cases where speakers
 interrupt each other regularly in conversations. Hence, a number of different
 methods for speaker segmentation were also tested, namely Kullback-Liebler (KL
-or KL2) @siegler1997 and penalized Generalized Likelihood Ration (GLR)
-thresholding @delacourt1999, which are not solely influenced by energy.
+or KL2) as discussed in @siegler1997 and penalized Generalized Likelihood Ration (GLR)
+thresholding as used in @delacourt1999, which are not solely influenced by energy.
 
 Segments obtained this way are then run through the LIUM speaker identification
 program and the most likely speaker predicted. Provided the segmentation is
@@ -260,7 +267,7 @@ the council will discuss the issue.
 for instance with regards to scheduling future meetings, deadlines, diplomatic
 visits to various regions, et cetera.
 
-An overview of the meetings is presented in @Table:tbl1.
+An overview of the meetings is presented in @Tbl:tbl1.
 
 Meeting ID        Topic                         Type
 ---------------   ----------------------------  ------------
@@ -300,11 +307,11 @@ and occasionally punctured by long stretches of silence.
 The annotation of training data was conducted in a semi-supervised and
 iterative manner. This was due mainly to the difficulty of identifying speakers
 across meetings, and also to reduce the time-costly manual labeling of speaker
-segment boundaries. The LIUM speaker diarization toolkit @rouvier2013
-@meignier2009 was utilized for most
+segment boundaries. The LIUM speaker diarization toolkit, discussed in
+@rouvier2013 and @meignier2009 was utilized for most
 of the training, specifically for speaker modeling and identification and the
 initial speaker clustering and labeling. Various Python scripts were also
-utilized for feature extraction @torfi2017, annotation and data analysis.
+utilized for feature extraction, as seen in @torfi2017, annotation and data analysis.
 
 A single speaker clustering run was conducted on the pre-processed audio to
 obtain the initial predictions for speaker segment boundaries and speaker
@@ -397,7 +404,7 @@ speaker model containing all speakers. As an appropriate separate Indonesian
 language corpus was unavailable, the UBM was pre-built from a different source.
 4. Evaluate the speaker model using the test data set aside in step 2 by
 calculating the per frame speaker identification accuracy. The results of this
-step are detailed in Table 2.
+step are detailed in @Tbl:tbl2.
 
 Training data (s)   SER (%)   # Speakers
 ----                ------    ----
@@ -427,7 +434,7 @@ results in less time through enrollment.
 
 The baseline system utilizes the standard LIUM toolkit setup to implement
 offline speaker diarization using data obtained from the corpus discussed in
-Section 3. This process has been covered in depth in *ref* and *ref*, with the
+Section 3. This process has been covered in depth in @meignier2009, with the
 relevant configuration for this experiment as follows:
 
 1. Feature extraction with 12 Mel-Frequency Cepstral Coefficients (MFCC) in
@@ -463,10 +470,7 @@ the beginnings and endings of utterances, splitting the incoming audio stream
 into a separate segment whenever voice activity is not detected. LIUM toolkit
 is then used to run speaker identification on the segment against the speaker
 model obtained in Section 4.1. For the current utterance, the system outputs
-the most likely speaker calculated over a sliding window. The online system is
-illustrated in @Fig:fig3.
-
-![Data flow diagram for proposed system](dfd_online.png){#fig:fig3}
+the most likely speaker calculated over a sliding window.
 
 In detail, the process can be broken down into the following steps:
 1. Analyze the incoming audio stream to detect voice activity.
@@ -483,7 +487,7 @@ period. The highest scoring speaker is output as the prediction for this
 segment.
 
 The results of the baseline and proposed systems for the 90, 120, and 150
-second speaker models is detailed in Table 3.
+second speaker models is detailed in @Tbl:tbl3.
 
 Model Method      SER (%)
 ----  ---------   ------
@@ -499,6 +503,8 @@ Model Method      SER (%)
       3-win       24.60
       5-win       24.92
       base        19.59
+
+: Speaker diarization and identification results for the various systems {#tbl:tbl3}
 
 Of note, the results of baseline system evaluation are consistently superior to
 the proposed system. The simplicity of the speaker segmentation method employed

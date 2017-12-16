@@ -126,29 +126,66 @@ def dfd_offline(name='dfd_offline', form='png',
     dot.render(name, cleanup=True)
 
 
+# def dfd_online(name='dfd_online', form='png',
+    # label='Data flow diagram for online identification system'):
+    # dot = gv.Digraph(comment=label, format=form)
+    # # Data nodes
+    # dot.attr('node', shape='box')
+    # dot.node('d1', 'Audio stream')
+    # dot.node('d2', 'Segments')
+    # dot.node('d3', 'Speaker model')
+    # dot.node('d4', 'Speaker hypotheses')
+
+    # # Process nodes
+    # dot.attr('node', shape='ellipse')
+    # dot.node('p1', 'Segment')
+    # dot.node('p2', 'Identify speakers')
+    # dot.node('p3', 'Generate transcript')
+
+    # dot.edges([('d1', 'p1'), ('p1', 'd2'), ('d2', 'p2'), ('d3', 'p2'),
+    # ('d2', 'p3'), ('d4', 'p3'), ('p3', 'd6')])
+    # dot.render(name, cleanup=True)
+
+
 def dfd_online(name='dfd_online', form='png',
                label='Data flow diagram for online identification system'):
-    dot = gv.Digraph(comment=label, format=form)
+    dot = gv.Digraph(name=name, comment=label, format=form)
+
     # Data nodes
     dot.attr('node', shape='box')
     dot.node('d1', 'Audio stream')
-    dot.node('d2', 'Segments')
-    dot.node('d3', 'Speaker model')
-    dot.node('d4', 'ASR models')
-    dot.node('d5', 'Speaker hypotheses')
-    dot.node('d6', 'Speech hypotheses')
-    dot.node('d7', 'Transcript')
+    dot.node('d2', 'Audio blocks')
+    dot.node('d3', 'Feature frames')
+    dot.node('d4', 'Speaker segments')
+    dot.node('d5', 'Speaker model')
+    dot.node('d6', 'Speaker likelihoods')
+    dot.node('d7', 'Windowed segments')
+    dot.node('d8', 'Speaker hyoptheses')
 
     # Process nodes
     dot.attr('node', shape='ellipse')
-    dot.node('p1', 'Segment')
-    dot.node('p2', 'Identify speakers')
-    dot.node('p3', 'Identify speech')
-    dot.node('p4', 'Generate transcript')
+    dot.node('p1', 'Read blocks')
+    dot.node('p2', 'Extract features')
+    dot.node('p3', 'Detect silence')
+    dot.node('p4', 'Detect turn')
+    dot.node('p5', 'Write buffer')
+    dot.node('p6', 'Speaker identification')
+    dot.node('p7', 'Window segments')
+    dot.node('p8', 'Calculate average')
+    dot.node('p9', 'Return prediction')
 
-    dot.edges([('d1', 'p1'), ('p1', 'd2'), ('d2', 'p2'), ('d3', 'p2'),
-               ('p2', 'd5'), ('d2', 'p3'), ('d4', 'p3'), ('p3', 'd6'),
-               ('d5', 'p4'), ('d6', 'p4'), ('p4', 'd7')])
+    with dot.subgraph(name='cluster_0') as c:
+        c.edges([('p1', 'd2'), ('d2', 'p2'), ('p2', 'd3'), ('d3', 'p3'),
+                 ('d3', 'p4'), ('p3', 'p5'), ('p4', 'p5')])
+        c.attr(label='Segmentation')
+
+    with dot.subgraph(name='cluster_1') as c:
+        c.edges([('p7', 'd7'), ('d7', 'p8'), ('p8', 'p9')])
+        c.attr(label='Windowing')
+
+    dot.edges([('d1', 'p1'), ('d4', 'p6'), ('d5', 'p6'), ('p6', 'd6'),
+               ('d6', 'p7'), ('p9', 'd8'), ('p5', 'd4')])
+
     dot.render(name, cleanup=True)
 
 
@@ -178,7 +215,8 @@ def dfd_online_window(name='dfd_online_window', form='png',
 
 
 if __name__ == "__main__":
-    diarization()
+    dfd_online()
+    # diarization()
     # dfd_labeling_single()
     # dfd_labeling_all()
     # dfd_baseline()
