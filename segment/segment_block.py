@@ -30,31 +30,13 @@ class Detector(object):
         return False
 
     @classmethod
-    def is_turn(cls, x, thr=1000, theta=1.82):
-        if x is None or len(x) <= 1:
-            print('x None')
+    def is_turn_generic(cls, y, func, thr):
+        if y is None:
             return False
-        elif cls._y is None:
-            print('y None')
-            cls._y = x
-            cls._cy = np.cov(cls._y, rowvar=False)
-            cls._ciy = np.linalg.inv(cls._cy)
-            cls._my = np.mean(cls._y, axis=0)
-            return False
+        elif cls.x is None:
+            cls.x = y
         else:
-            cx = np.cov(x, rowvar=False)
-            cix = np.linalg.inv(cx)
-            mx = np.mean(x, axis=0)
-            dxy = mx - cls._my
-            kl2 = np.trace((cx - cls._cy) * (cls._ciy - cix)) + \
-                np.trace((cls._ciy + cix) * np.outer(dxy, dxy))
-            cls._y = x
-            cls._cy = cx
-            cls._ciy = cix
-            cls._my = mx
-            if kl2 > thr:
-                print(kl2)
-                return True
+            return func(x, y) < thr
 
 
 class Segmentor:
@@ -68,8 +50,8 @@ class Segmentor:
         self.can_split = False
 
     def segment_block(self, is_silent=Detector.is_silent,
-                      is_turn=Detector.is_turn, on_split=None, energy_thr=-10,
-                      sil_len_thr=0.75):
+                      is_turn=Detector.is_turn, on_split=None,
+                      energy_thr=-10, sil_len_thr=0.75):
         if on_split is None:
             on_split = self.on_split
 
@@ -82,7 +64,8 @@ class Segmentor:
             frames = mfcc(block, self.samplerate)
             sample_buffer.extend(block)
 
-            if is_silent(frames[:, 0], energy_thr, sil_len_thr):
+            # if is_silent(frames[:, 0], energy_thr, sil_len_thr):
+            if Detector.is_turn_generic(frames, is_turn, thr):
                 print(n)
                 on_split(sample_buffer)
                 sample_buffer = []

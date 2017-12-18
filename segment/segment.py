@@ -38,10 +38,14 @@ def glr(x, y, theta=1.82):
 def bic(x, y, theta=1.82):
     px = np.log(det(np.cov(x, rowvar=False)))
     py = np.log(det(np.cov(x, rowvar=False)))
-    pz = np.log(det(np.cov(np.vstack((x, y)), rowvar=False)))
-    p = x.shape[1]
+    z = np.vstack((x, y))
+    pz = np.log(det(np.cov(z, rowvar=False)))
+    d = 0.5 * (z.shape[0] * pz - x.shape[0] * px - y.shape[0] * py)
+    p = z.shape[1]
+    corr = theta * 0.25 * p * (p + 3) * np.log(z.shape[0])
+    return d - corr
     # Nz/2 log|CovZ| - Nx/2 log|CovX| - Nx/2 log|CovY| - lambda*P
-    return len(x) * (pz - 0.5 * (px + py)) - 0.25 * p * (p + 3) * np.log(len(x)) * theta
+    # return len(x) * (pz - 0.5 * (px + py)) - 0.25 * p * (p + 3) * np.log(len(x)) * theta
 
 
 def xbic(x, y):
