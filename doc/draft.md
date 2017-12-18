@@ -20,81 +20,101 @@ online and baseline offline systems, respectively.
 
 # 1 Background
 
-Speaker diarization is the process of determining 'who spoke when', for
-instance in a conference or interview setting. The task of speaker identification
-is to take audio containing speech from one or more speakers and determine the
-identity of the speaker at any given time. In online speaker identification, there
-is the additional constraint of producing these identities in a timely manner,
-be it in regular time intervals or at certain speech boundaries. Online speaker
-identification differs from offline speaker identification mainly in the amount of
-information available for analysis; online identification makes use of all data
-available up to the current time, whereas for offline identification data at all
-time points is available.
-
-Online speaker diarization is important when real time or close to real time
-information regarding speakers is required. Paired with online speech
-recognition, for example, it becomes possible to generate a transcription of an
-ongoing conference or meeting. Other uses include the addition of real time or
-close to real time machine translation and summarization. This research
-describes the process of constructing an online speaker diarization system,
-detailing the corpus development, system design, and experiments.
+Speaker diarization and identification is the process of determining 'who spoke
+when', for instance in a conference or interview setting. Speaker diarization
+usually refers to the task of taking audio containing speech from one or more
+speakers and determining which parts are spoken by which speakers, after which
+speaker identification can be performed to determine identity. In
+online speaker identification, there is the additional constraint of producing
+these identities in a timely manner, be it at regular time intervals or at
+certain speech boundaries. Online speaker diarization differs from offline
+speaker diarization mainly in the amount of information available for
+analysis; online diarization makes use of all data available up to the
+current time, whereas for offline diarization data at all time points is
+available.
 
 Offline speaker diarization is well-established, with systems assessed on
 evaluation challenges such as the National Institute of Standards and
-Technology (NIST) Rich Transcription evaluation. Until recently, most of the
-approaches in speaker diarization were centred around the process of
+Technology (NIST) Rich Transcription evaluation. Most
+approaches in speaker diarization are centred around the process of
 converging towards an optimum number of clusters corresponding to speakers,
 either from very few clusters (top-down) or from a large number derived from
-speaker segments (bottom-up).
+speaker segments (bottom-up). In the more common bottom-up approach, the
+diarization process is typically broken down into a number of steps:
 
-In the more common bottom-up approach, the diarization process can be broken
-down into a number of steps.
-In speaker segmentation, the incoming speech is split into segments containing
-speech from a single speaker. In speaker clustering, the segments belonging to
-the same speaker are grouped together. Finally, these groups of segments are
-used to run speaker identification. Additional post-processing methods are used
-to improve predictions, but are often dependent on analysis over the entire
-length of speech, which may be unavailable in advance in the online scenario.
+1. Speaker segmentation, alternatively speaker change detection or speaker turn
+detection, splits the audio at points where speaker changes occur. Hence each
+resulting segment contains speech from a single speaker. In this approach,
+distance-based metrics
+are calculated between adjacent audio blocks to determine whether the blocks
+originate from a single speaker. Commonly used metrics include the Bayesian
+information criterion (BIC), generalized likelihood ratio (GLR), and Kullback-
+Leibler (KL or KL2) divergence.
+2. Speaker clustering, where segments belonging to the same speaker are grouped
+together. The label of the resulting clusters corresponds to a speaker, though
+the identity is undetermined at this point. In an offline setting, hierarchical
+clustering is usually performed.
+3. Post-processing methods are used to improve predictions; non-speech segments
+can be classified and excluded from clustering, Viterbi decoding can be used to
+estimate the most likely sequence of clusters, and so on.
+
 This process is illustrated in @Fig:diar: As seen in the lower picture, the
 incoming signal is split into 5 voiced segments and 1 unvoiced segment, and
 is subsequently clustered to obtain the speaker labels for each segment. In the
-case of speaker identification, the speaker labels are instead the actual
-speaker identities.
+case of speaker identification, the process is performed on the clusters to
+obtain the actual speaker identities.
 
 ![Illustration of diarization process](diarization_wave.svg){#fig:diar}
+
+The standard approach to speaker identification is similar to that in speaker
+verification; a Gaussian Mixtures Model (GMM) representing the vocal
+characteristics of the average person is first trained from a large number of
+speakers, and is dubbed the universal background model (UBM). For each user
+to be identified, the training vectors derived from the user's speech are
+adapted to the UBM's parameters by performing maximum a posteriori
+(MAP) adaptation. This process is described in greater detail in @reynolds2000.
 
 Newer systems have adopted the usage of total variability statistics originally
 developed for the speaker verification domain to achieve results comparable
 to the aforementioned approaches while discarding the need for complicated
-back end post-processing. In this approach, the most salient features in the
-low-dimensional i-vector space are extracted and exploited to allow for more
-accurate clusterings.
+back end post-processing @dehak2010. In this approach, the most salient
+features in the low-dimensional i-vector space are extracted and exploited to
+allow for more accurate clusterings.
 
-Each meeting was subsequently analyzed to determine when speaker changes
-occurred, known variously as speaker change detection, speaker turn
-identification, and speaker segmentation. In an offline setting, this typically
-consists of the following steps in most speech diarization systems:
+Online speaker diarization is important when real time or close to real time
+information regarding speakers is required. Paired with online speech
+recognition, for example, it becomes possible to generate a transcription of an
+ongoing conference or meeting. The clustering step is useful in obtaining
+speaker clusters, which can boost speech recognition when speaker adaptation is
+performed. Other uses include the addition of real time or close to real time
+machine translation and summarization.
 
-1. Divide audio into frames.
-2. First pass using BL.
-3. Second pass using KL2.
+Unfortunately, many approaches that are standard in offline diarization
+cannot be used in an online setting, or require some modification. For instance,
+the hierarchical clustering used in offline diarization requires full knowledge
+of the data to be clustered beforehand. In addition, some of the speaker
+segmentation methods depend on smoothing the resulting metrics first, as in
+@delacourt1999 or depend on the analysis of large audio buffers which may not
+be feasible due to latency constraints.
 
-In practice, speaker segmentation mostly succeeds in guaranteeing individual
-segments contain at most one speaker, but fails to ensure consecutive segments
-belong to different speakers.
+In addition, most existing research is developed and built upon existing
+evaluation challenges, such as the aforementioned NIST Rich Transcription
+evaluation, in which blind diarization is assumed, where the number and
+identities of speakers are unknown a priori. However, for the purpose of
+meeting diarization it is generally assumed that there is a closed set of
+participants, with a priori knowledge available. The assumptions are therefore
+more closely aligned with speaker verification.
 
-This process is typically followed by hierarchical clustering of speakers
-based on information dervied from the resulting speaker segments. In an offline
-setting, this is achieved via the following steps:
-
-1. Train a GMM for each speaker segment
-2. Specify a difference metric as the basis for clustering
-3. Cluster segments hierarchically using difference threshold as reference
-
+This research describes the process of constructing an online speaker
+diarization and identification system for meeting transcription. The system
+has a priori knowledge of the speakers to be identified, and must give speaker
+predictions in a timely manner to server as a visual guide for meetings.
 The remainder of this study is organized as follows: Section 2 discusses
-related research and the design of the system to be built, Section 3 describes
-the process of building the speaker corpus, and Section 4 discusses the
-experimental setup and results.
+related research and the design of the system to be built, in particular with
+regards to online speaker segmentation and identification post-processing.
+Section 3 describes the process of building the speaker corpus, including data
+collection and annotation, and Section 4 discusses the experimental setup and
+results, comparing between the proposed system and a baseline offline system.
 
 
 # 2 Online Diarization System
@@ -121,22 +141,18 @@ necessary.
 With the capabilities of modern graphic processing units (GPU), it is possible
 to approach the diarization problem in a brute-force manner, by offloading most
 computationally expensive tasks to the GPU. In @friedland2012, all of the
-standard
-offline steps are reproduced for each incoming block of data, but as the GPU is
-able to process at thousands of times the rate of real time, it is essentially
-real time.
+standard offline steps are reproduced for each incoming block of data, but as
+the GPU is able to process at thousands of times the rate of real time, it is
+essentially real time.
 
 ## 2.2 Design and Analysis
 
-As is often the case with under-resourced languages, the hardware available for
-processing and research is similarly under-resourced. Hence, computationally
-intensive approaches may be difficult to implement on large datasets
-For instance, the training of i-vector extractors for speaker identification is
-prohibitively time-consuming on lower-end commodity hardware. Similarly,
-adequate GPUs for DNN training and other GPU-based approaches may be
-unavailable. Due to these limitations, the development of a relatively
-computationally efficient speaker diarization system, both in terms of training
-and subsequent deployment, is a requirement for this research.
+One of the larger difficulties with speaker diarization, specifically the
+clustering step, is the assumption of previously unknown speakers and an
+unknown number of speakers. Hence, in this research, given the domain of
+meeting transcription and known prior speakers, we attempt to eschew the
+clustering step in favor of direct identification on speaker segments. This
+allows for much less complexity at the cost of reduced accuracy.
 
 In addition, the diarization system should be easily integrated into existing
 workflows. Specifically, the system should act as middleware to a real time
@@ -157,6 +173,10 @@ this research essentially extends the aforementioned systems to allow for
 functional online diarization.
 
 ## 2.3 Online speaker segmentation
+
+In practice, speaker segmentation mostly succeeds in guaranteeing individual
+segments contain at most one speaker, but fails to ensure consecutive segments
+belong to different speakers.
 
 For online diarization, a custom GStreamer plugin is developed for speaker
 segmentation, separating the input audio stream at low energy points in the
