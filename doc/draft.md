@@ -4,16 +4,19 @@
 
 # Abstract
 
-Online speaker diarization is the process of determining 'who spoke when'
-given an ongoing conversation or audio stream, in contrast to the offline
-scenario where the conversation has concluded and the entire file is available.
+Online speaker diarization and identification is the process of determining
+'who spoke when' given an ongoing conversation or audio stream, in contrast to
+the offline scenario where the conversation has concluded and the entire file
+is available. Online identification is required when speaker identities need to
+be determined during or directly after speech, for instance in the automatic
+transcription of live broadcasts and of some meetings.
 The process of constructing an Indonesian language online speaker identification
-system is explored, from corpus development to software design and testing.
+system is explored, from design, corpus development, to experimentation.
 The system conducts speaker identification directly on low-energy separated
 segments and employs a rolling window of time-weighted average likelihoods to
 improve accuracy, resulting in a system with a latency of one speaker segment
 for predictions. Experimentation against a standard baseline offline system
-resulted in speaker error rates (SER) of 25.5% and 19.3% for the proposed
+resulted in speaker error rates (SER) of 25.5% and 18.5% for the proposed
 online and baseline offline systems, respectively.
 
 *Keywords*: Speaker identification, Indonesian, online, average window
@@ -64,7 +67,7 @@ is subsequently clustered to obtain the speaker labels for each segment. In the
 case of speaker identification, the process is performed on the clusters to
 obtain the actual speaker identities.
 
-![Illustration of diarization process](diarization_wave.svg){#fig:diar}
+![Illustration of diarization process](diarization_wave.png){#fig:diar}
 
 The standard approach to speaker identification is similar to that in speaker
 verification; a Gaussian Mixtures Model (GMM) representing the vocal
@@ -82,12 +85,13 @@ features in the low-dimensional i-vector space are extracted and exploited to
 allow for more accurate clusterings.
 
 Online speaker diarization is important when real time or close to real time
-information regarding speakers is required. Paired with online speech
+information regarding speaker identities is required. Paired with online speech
 recognition, for example, it becomes possible to generate a transcription of an
-ongoing conference or meeting. The clustering step is useful in obtaining
-speaker clusters, which can boost speech recognition when speaker adaptation is
-performed. Other uses include the addition of real time or close to real time
-machine translation and summarization.
+ongoing conference, meeting, live broadcast, or audio stream in general. The
+clustering step is useful in obtaining speaker clusters, which can boost speech
+recognition when speaker adaptation is performed. Other uses include the
+addition of real time or close to real time machine translation and
+summarization.
 
 Unfortunately, many approaches that are standard in offline diarization
 cannot be used in an online setting, or require some modification. For instance,
@@ -154,7 +158,7 @@ meeting transcription and known prior speakers, we attempt to eschew the
 clustering step in favor of direct identification on speaker segments. This
 allows for much less complexity at the cost of reduced accuracy.
 
-In addition, the diarization system should be easily integrated into existing
+In addition, the identification system should be easily integrated into existing
 workflows. Specifically, the system should act as middleware to a real time
 signal processing pipeline. In this way, the low-level specifics of signal
 input/output and communication are handled by the pipeline framework. This also
@@ -162,7 +166,7 @@ allows for greater extensibility of the system to related functionality, such
 as speech recognition, machine translation, or automatic summarization. An
 example of the finished system is shown in @Fig:pipeline.
 
-![Block diagram for online diarization system](dfd_online.png){#fig:pipeline}
+![Block diagram for online identification system](dfd_online.png){#fig:pipeline}
 
 The Perisalah system, an Indonesian language speech recognition system, was
 chosen as the starting point for its functional online component, developed
@@ -170,7 +174,7 @@ from the Kaldi GStreamer Server by @alumae2014. The Transcriber application in
 @rahman2017, developed from the Kaldi Offline Transcriber, although similar in
 functionality, lacks an online diarization component. The system developed for
 this research essentially extends the aforementioned systems to allow for
-functional online diarization.
+functional online identification.
 
 ## 2.3 Online speaker segmentation
 
@@ -492,19 +496,32 @@ is then used to run speaker identification on the segment against the speaker
 model obtained in Section 4.1. For the current utterance, the system outputs
 the most likely speaker calculated over a sliding window.
 
-In detail, the process can be broken down into the following steps:
-1. Analyze the incoming audio stream to detect voice activity.
-2. When a portion of the signal is voiced, keep the samples in a separate
-buffer.
-3. When a silent/non-voiced portion of the signal is encountered, if the
-silence is preceded by a voiced portion and if the length of silence exceeds a
-specified threshold, write the buffer to a file. This is our speaker segment.
-4. Run speaker identification on the segment against the speaker model obtained
-in Section 4.1, storing the likelihood of *all* speakers.
-5. Take all speaker predictions from the previous *n* segments or *t* time,
-whichever is shorter, and calculate the average score for each speaker in this
-period. The highest scoring speaker is output as the prediction for this
-segment.
+In detail, as illustrated in @Fig:pipeline, the process can be broken down into
+the following steps:
+1. Read the incoming audio stream in blocks.
+2. Extract MFCC features, including energy.
+3. Check whether the average energy of the given block is above a specified
+energy threshold, upon which the block is considered silent or non-silent.
+4. Calculate the speaker distance between the current and previous block, using
+a metric such as BIC, GLR, or KL2. If the distance score exceeds a specified
+threshold, the block is considered a new turn.
+5. If the given audio block is _not_ considered silent or belonging to a new
+speaker, store the samples of the audio block.
+6. After a specified duration of consecutive silent/new speaker blocks are
+encountered, 'split' the stream by writing the stored samples into a new audio
+file, creating a new speaker segment.
+7. Run speaker identification on the segment against the speaker model obtained
+in Section 4.1, storing the likelihoods of *all* speakers.
+8. Take all speaker likelihood scores from a specified amount of preceding
+segments, and perform a time-weighted averaging for each speaker. The speaker
+with the highest score is given as the prediction.
+
+For the experiments below, the block length is set at 1024 samples, the energy
+threshold in step 3 is set at -15 dBV, the duration of consecutive silent/new
+speaker blocks is set at 0.65 seconds, and the window size for averaging is set
+variously at 3, 5, and 7 segments. The use of speaker turn detection, however,
+is omitted from the final experiment, as it was found to perform poorly without
+proper experimentation to determine a suitable threshold and penalty value.
 
 The results of the baseline and proposed systems for the 90, 120, and 150
 second speaker models is detailed in @Tbl:tbl3.
@@ -532,8 +549,29 @@ in the proposed system results in often inaccurate segments, specifically
 during periods of back and forth conversation. This is mitigated somewhat by
 the windowing method used, which on average results in a small improvement in
 accuracy. However, accuracy improvements quickly subside with larger window
-sizes. Furthermore, this method breaks down in more dynamic conversations,
+sizes. Furthermore, this method may break down in more dynamic conversations,
 where speaker turns occur more rapidly.
+
+The various steps in the proposed system contribute to the final latency
+of the system. Using the 120 second speaker model, and utilizing a five frame
+window, the average latency as measured from the end of a speaker
+segment to the moment of speaker prediction is 0.77 seconds, with the average
+speaker segment being 5.23 seconds long. This measure of latency includes the
+time needed for segment splitting, speaker identification, and average
+windowing. The average ratio between latency and segment duration is 0.21. This
+indicates that, on average, 0.21 times the duration of the input segment is
+needed to produce a prediction. By comparison, in @rahman2017 the latency is
+calculated as 1.10 times the duration of the input file.
+
+Generally speaking, the largest contributor to total latency is the
+identification process itself, namely the LIUM toolkit identification program.
+Based on code profiling, on average this process contributes to 98.85% of the
+computation time. This can be attributed to the lengthy startup time of the
+Java Virtual Machine (JVM) which is initialized each call, evidenced by the
+proportionally lower latency-duration ratio for longer segments. To bypass this
+startup time, it would be necessary to implement the program as a daemon or
+service that waits instead of terminates on each call. Another option would be
+to implement the program in another language altogether.
 
 
 # 5 Conclusion
@@ -551,9 +589,9 @@ predictions to boost speaker prediction accuracy. The system is then tested and
 compared against a baseline offline speaker diarization system. Results show
 that the offline system retains the advantage in terms of prediction accuracy,
 although it requires knowledge of the entire audio stream beforehand. On a
-speaker model derived from 150 seconds of user speech, the online system with
-a 3-segment window produced a SER of 24.6% compared to 19.59% for the baseline
-system.
+speaker model derived from 120 seconds of user speech, the online system with
+a 5-segment window produced a SER of 25.52% compared to 18.48% for the baseline
+system. The latency of such 
 
 
 # 6 Bibliography
