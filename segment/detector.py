@@ -58,16 +58,18 @@ class FrameDetector(object):
                       frame_stride=0.01, num_cepstral=self.num_coeffs,
                       dc_elimination=False)
 
-        if self.fb_idx + len(frames) < self.fb_size:
-            self.fb[self.fb_idx:self.fb_idx + len(frames)] = frames
-            self.fb_idx += len(frames)
+        len_f = len(frames)
+
+        if self.fb_idx + len_f < self.fb_size:
+            self.fb[self.fb_idx:self.fb_idx + len_f] = frames
+            self.fb_idx += len_f
         else:
             if self.fb_idx != self.fb_size:
-                self.fb[:-len(frames)] = self.fb[len(frames) -
-                                                 self.fb_size + self.fb_idx:self.fb_idx]
+                src = len_f - self.fb_size + self.fb_idx
+                self.fb[:-len_f] = self.fb[src:self.fb_idx]
             else:
-                self.fb[:-len(frames)] = self.fb[len(frames):]
-            self.fb[-len(frames):] = frames
+                self.fb[:-len_f] = self.fb[len_f:]
+            self.fb[-len_f:] = frames
             self.fb_idx = self.fb_size
 
     def is_full(self):
