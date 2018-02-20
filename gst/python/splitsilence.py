@@ -11,7 +11,7 @@ from queue import Queue
 from threading import Thread
 import numpy as np
 import soundfile as sf
-from detector import FrameDetector
+from ... segment.detector import FrameDetector
 from speechpy.feature import mfcc
 from tempfile import mkstemp
 import logging
@@ -139,25 +139,26 @@ class GstPlugin(GstBase.BaseTransform):
         a specified number of silent blocks are detected, after which the
         buffer is dumped into a file.
         """
-        energy_thr = 10**(0.1 *
-                          self.props['energy_thr'])*np.iinfo(np.int16).max
+        # energy_thr = 10**(0.1 *
+        # self.props['energy_thr'])*np.iinfo(np.int16).max
         latency = self.samplerate
         sample_buffer = []
         out_segments = []
         # silence length threshold in samples
-        sil_len_thr = int(self.props['split_thr'] * self.samplerate / 2048)
+        sil_len_thr = self.props['split_thr']
+        energy_thr = self.props['energy_thr']
 
-        fd = FrameDetector(self.samplerate, latency, 13, energy_thr,
-                           sil_len_thr)
+        fd = FrameDetector(self.samplerate, fb_size=latency, num_cepstrals=13,
+                           num_filters=20, energy_thr=energy_thr,
+                           sil_len_thr=sil_len_thr)
 
         for raw in iter(self.blk_q.get, self.sentinel):
             block = np.fromstring(raw, dtype=np.int16)
             sample_buffer.extend(block)
             fd.push_block(block)
-            if fd.is_full():
-                if is_silent(block) or is_turn():
-                    out_segments.append(self.on_split(sample_buffer))
-                    sample_buffer = []
+            if fd.is_voiced(len(block)):
+                out_segments.append(self.on_split(sample_buffer))
+                sample_buffer = []
 
         out_segments.append(self.on_split(sample_buffer))
 

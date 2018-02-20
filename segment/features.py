@@ -1,12 +1,13 @@
 import numpy as np
 from scipy.fftpack import dct
-from segmentaxis import segment_axis as segax
+from . segmentaxis import segment_axis as segax
 
 
 class FrameGenerator(object):
     """
     Taken from speechpy, with addition of class wrapper to forgo the repeated
-    calculation of filterbanks
+    calculation of filterbanks. Along with segmentaxis, this improves
+    performance by a factor of 10+.
     """
 
     def __init__(self, samplerate, num_filters=40, low_freq=None, high_freq=None,
@@ -34,17 +35,17 @@ class FrameGenerator(object):
             out[second] = (right - x[second]) / (right - middle)
             return out
 
-        nyq_freq = int(self.fft_length / 2) + 1
+        rfft_length = int(self.fft_length / 2) + 1
 
         mels = np.linspace(freq_to_mel(self.low_freq),
                            freq_to_mel(self.high_freq), self.num_filters + 2)
 
         hertz = mel_to_freq(mels)
 
-        freq_bins = (np.floor((nyq_freq + 1) * hertz /
+        freq_bins = (np.floor((rfft_length + 1) * hertz /
                               self.samplerate)).astype(int)
 
-        filterbank = np.zeros((self.num_filters, nyq_freq))
+        filterbank = np.zeros((self.num_filters, rfft_length))
 
         for i in range(self.num_filters):
             left = freq_bins[i]
@@ -64,7 +65,6 @@ class FrameGenerator(object):
         spec = np.abs(np.fft.rfft(
             frames, n=self.fft_length, axis=-1, norm=None))
         pow_spec = 1 / self.fft_length * np.square(spec)
-        num_fft_coeffs = pow_spec.shape[1]
         frame_energies = np.sum(pow_spec, axis=1)
         frame_energies[:] = np.where(frame_energies == 0, np.finfo(float).eps,
                                      frame_energies)
