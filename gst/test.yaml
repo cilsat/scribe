@@ -1,12 +1,12 @@
 filesrc:
   name: "source"
-  location: "/home/cilsat/dev/scribe/test/splits/120/m0021-2/m0021-2_173139.wav"
+  location: "/home/cilsat/data/speech/berita/berita.wav"
 wavparse:
   name: "wavparse"
 splitsilence:
   name: "test"
-  split_thr: 3
+  split_thr: 0.3
   energy_thr: -15.0
   out_dir: "/tmp"
-autoaudiosink:
+fakesink:
   name: "sink"

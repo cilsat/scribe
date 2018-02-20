@@ -17,8 +17,7 @@ class Detector(object):
 
     @classmethod
     def is_silent(cls, block, energy_thr, sil_len_thr):
-        # rms = np.sqrt(np.mean(block**2))
-        rms = np.mean(block)
+        rms = np.mean(np.abs(block))
         if rms < energy_thr:
             cls._sil_sum += 1
             if cls._can_split and cls._sil_sum > sil_len_thr:
@@ -30,7 +29,7 @@ class Detector(object):
         return False
 
     @classmethod
-    def is_turn_generic(cls, y, func, thr):
+    def is_turn(cls, y, func, thr):
         if y is None:
             return False
         elif cls.x is None:
@@ -40,7 +39,7 @@ class Detector(object):
 
 
 class Segmentor:
-    def __init__(self, blocksize, samplerate, data_iter, out_dir):
+    def __init__(self, data_iter, out_dir, blocksize=800, samplerate=16000):
         self.blocksize = blocksize
         self.samplerate = samplerate
         self.data_iter = data_iter
@@ -49,30 +48,34 @@ class Segmentor:
         self.sil_sum = 0
         self.can_split = False
 
-    def segment_block(self, is_silent=Detector.is_silent,
-                      is_turn=Detector.is_turn, on_split=None,
+    def segment_block(self, is_silent=None,
+                      is_turn=None, on_split=None,
                       energy_thr=-10, sil_len_thr=0.75):
         if on_split is None:
             on_split = self.on_split
+        if is_silent is None:
+            is_silent = Detector.is_silent
+        if is_turn is None:
+            is_turn = Detector.is_turn
 
-        # energy_thr = 10**(0.1 * energy_thr)
+        energy_thr = 10**(0.1 * energy_thr)
         sil_len_thr = int(sil_len_thr * self.samplerate / self.blocksize)
-        print(sil_len_thr)
         sample_buffer = []
+        out_segments = []
 
         for n, block in enumerate(self.data_iter):
             frames = mfcc(block, self.samplerate)
             sample_buffer.extend(block)
 
-            # if is_silent(frames[:, 0], energy_thr, sil_len_thr):
-            if Detector.is_turn_generic(frames, is_turn, thr):
-                print(n)
-                on_split(sample_buffer)
+            if is_silent(block, energy_thr, sil_len_thr):
+                out_segments.append(on_split(sample_buffer))
                 sample_buffer = []
 
-        on_split(sample_buffer)
+        out_segments.append(on_split(sample_buffer))
+        return out_segments
 
     def on_split(self, sample_buffer):
         fd, name = mkstemp(suffix='.wav', dir=self.out_dir)
         sf.write(name, sample_buffer, samplerate=self.samplerate,
                  subtype='PCM_16')
+        return (fd, name)

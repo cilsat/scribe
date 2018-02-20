@@ -11,13 +11,16 @@ from queue import Queue
 from threading import Thread
 import numpy as np
 import soundfile as sf
+from detector import FrameDetector
+from speechpy.feature import mfcc
 from tempfile import mkstemp
-
+import logging
 import gi
 gi.require_version('Gst', '1.0')
 gi.require_version('GstBase', '1.0')
 from gi.repository import Gst, GObject, GstBase
 
+logger = logging.getLogger(__name__)
 Gst.init(None)
 caps = 'audio/x-raw,format=S16LE,rate=16000,channels=1'
 
@@ -43,10 +46,10 @@ class GstPlugin(GstBase.BaseTransform):
 
     __gproperties__ = {
         'split_thr': (
-            GObject.TYPE_UINT,
+            GObject.TYPE_FLOAT,
             'Split Threshold',
-            'Max consecutive silent blocks before gate',
-            1, 150, 3,  # min, max, default
+            'Length of silence before splitting',
+            0.1, 10.0, 0.3,  # min, max, default
             GObject.PARAM_READWRITE | GObject.PARAM_CONSTRUCT
         ),
         'energy_thr': (
@@ -68,15 +71,17 @@ class GstPlugin(GstBase.BaseTransform):
     def __init__(self):
         GstBase.BaseTransform.__init__(self)
 
+        self.samplerate = 16000
         self.props = {
-            'split_thr': 3,
+            'split_thr': 0.3,
             'energy_thr': -15,
             'out_dir': '/tmp'
         }
-        self.samplerate = 16000
+
         self.blk_q = Queue()
         self.sentinel = object()
-        print_t = Thread(target=self.split_file, args=())
+
+        print_t = Thread(target=self.segment, args=())
         print_t.start()
 
     def set_property(self, prop, val):
@@ -90,6 +95,8 @@ class GstPlugin(GstBase.BaseTransform):
             self.props['split_thr'] = val
         if prop.name == 'energy_thr':
             self.props['energy_thr'] = val
+        if prop.name == 'blocksize':
+            self.props['blocksize'] = val
         if prop.name == 'out_dir':
             self.props['out_dir'] = val
 
@@ -99,6 +106,8 @@ class GstPlugin(GstBase.BaseTransform):
             val = self.props['split_thr']
         if prop.name == 'energy_thr':
             val = self.props['energy_thr']
+        if prop.name == 'blocksize':
+            val = self.props['blocksize']
         if prop.name == 'out_dir':
             val = self.props['out_dir']
 
@@ -109,8 +118,8 @@ class GstPlugin(GstBase.BaseTransform):
         and use it from a different thread.
         """
         # Gst.info("timestamp(buffer):%s" % (Gst.TIME_ARGS(buf.pts)))
-        res, map = buf.map(Gst.MapFlags.READ)
-        self.blk_q.put(map.data)
+        res, bmap = buf.map(Gst.MapFlags.READ)
+        self.blk_q.put(bmap.data)
 
         return Gst.FlowReturn.OK
 
@@ -124,44 +133,40 @@ class GstPlugin(GstBase.BaseTransform):
                 blk = np.fromstring(raw, dtype=np.int16)
                 f.write(blk)
 
-    def split_file(self):
-        """
-        Gets audio blocks from stream and decides whether block is silent
+    def segment(self):
+        """Gets audio blocks from stream and decides whether block is silent
         or non-silent. Accumulates non-silent blocks into a buffer until
-        a specified sequence of silent blocks is detected, after which
+        a specified number of silent blocks are detected, after which the
         buffer is dumped into a file.
         """
-        # number of consecutive silent blocks detected so far
-        sil_sum = 0
-        # maximum sil_sum before buffer is dumped to file
-        split_thr = self.props['split_thr']
-        # level in dB below which a block is considered silent
-        energy_thr = 10**(0.1 * self.props['energy_thr']) * 32768
-        # directory to place split files
-        out_dir = self.props['out_dir']
-        # list to store audio buffer
-        buf = []
+        energy_thr = 10**(0.1 *
+                          self.props['energy_thr'])*np.iinfo(np.int16).max
+        latency = self.samplerate
+        sample_buffer = []
+        out_segments = []
+        # silence length threshold in samples
+        sil_len_thr = int(self.props['split_thr'] * self.samplerate / 2048)
+
+        fd = FrameDetector(self.samplerate, latency, 13, energy_thr,
+                           sil_len_thr)
 
         for raw in iter(self.blk_q.get, self.sentinel):
-            # convert raw bytes to ndarray
-            blk = np.fromstring(raw, dtype=np.int16)
-            # estimate energy level of current block
-            rms = np.mean(np.abs(blk))
+            block = np.fromstring(raw, dtype=np.int16)
+            sample_buffer.extend(block)
+            fd.push_block(block)
+            if fd.is_full():
+                if is_silent(block) or is_turn():
+                    out_segments.append(self.on_split(sample_buffer))
+                    sample_buffer = []
 
-            if rms < energy_thr:
-                sil_sum += 1
-                if not buf:
-                    continue
-                else:
-                    buf.extend(blk)
-                if sil_sum > split_thr:
-                    fd, name = mkstemp(suffix='.wav', dir=out_dir)
-                    sf.write(name, buf, samplerate=16000, subtype='PCM_16')
-                    print(len(buf), fd)
-                    buf = []
-            else:
-                sil_sum = 0
-                buf.extend(blk)
+        out_segments.append(self.on_split(sample_buffer))
+
+    def on_split(self, sample_buffer):
+        fd, name = mkstemp(suffix='.wav', dir=self.props['out_dir'])
+        sf.write(name, sample_buffer, samplerate=self.samplerate,
+                 subtype='PCM_16')
+        logger.debug("%d %s" % (fd, name))
+        return (fd, name)
 
 
 GObject.type_register(GstPlugin)

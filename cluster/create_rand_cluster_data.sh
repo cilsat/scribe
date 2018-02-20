@@ -11,6 +11,9 @@ num=$2    # number of speakers/files to take
 model=$3  # path to model dir; needs .mdl, .fst
 out=$4    # output path
 
+# prepare out dir
+[ ! -d "$out" ] && mkdir -p $out
+
 # randomly choose speakers from root dir
 spkr=($(ls $root | shuf | head -n $num))
 

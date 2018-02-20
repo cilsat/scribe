@@ -591,7 +591,7 @@ that the offline system retains the advantage in terms of prediction accuracy,
 although it requires knowledge of the entire audio stream beforehand. On a
 speaker model derived from 120 seconds of user speech, the online system with
 a 5-segment window produced a SER of 25.52% compared to 18.48% for the baseline
-system. The latency of such 
+system. The latency of such
 
 
 # 6 Bibliography

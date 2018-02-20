@@ -1,12 +1,15 @@
 import sys
-import json
 import gi
 import yaml
+import logging
+
 from importlib import import_module
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
 
 Gst.init(None)
+
+logger = logging.getLogger(__name__)
 
 
 class Pipeliner:
@@ -21,7 +24,10 @@ class Pipeliner:
         self.plugin = _plug
 
         try:
-            self.prep(yaml.load(open(_cfg)))
+            cfg = yaml.load(open(_cfg))
+            logger.debug("Creating test pipeline using conf: %s" % cfg)
+            logger.debug("Test plugin is %s" % self.plugin)
+            self.prep(cfg)
         except Exception as e:
             sys.exit(type(e).__name__ + ': ' + str(e))
 
@@ -29,6 +35,13 @@ class Pipeliner:
         bus.add_signal_watch()
         bus.connect('message::eos', self.on_eos)
         bus.connect('message::error', self.on_error)
+
+        ret = self.pipeline.set_state(Gst.State.READY)
+        if ret == Gst.StateChangeReturn.FAILURE:
+            logger.debug("Error readying pipeline")
+            sys.exit(0)
+        else:
+            logger.debug("Pipeline READY")
 
     def prep(self, cfg):
         """
@@ -38,9 +51,10 @@ class Pipeliner:
         for plugin, props in cfg.items():
             # make element if non-test plugin
             if plugin != self.plugin:
+                logger.debug("Adding %s to the pipeline" % plugin)
                 element = Gst.ElementFactory.make(plugin)
             else:
-                plugin_module = import_module('gst.python.' + self.plugin)
+                plugin_module = import_module('python.' + self.plugin)
                 element = plugin_module.GstPlugin()
             for k, v in props.items():
                 # add exception for pesky caps and set properties
@@ -60,14 +74,14 @@ class Pipeliner:
 
     def on_error(self, _bus, _msg):
         err, dbg = _msg.parse_error()
-        print(_msg.src.get_name(), err.message)
+        logger.debug("%s: %s" % (_msg.src.get_name(), err.message))
         self.on_eos(_bus, _msg)
 
     def play(self):
         ret = self.pipeline.set_state(Gst.State.PLAYING)
         if ret == Gst.StateChangeReturn.FAILURE:
-            print("Error opening pipeline")
-            sys.exit(1)
+            logger.debug("Error opening pipeline")
+            sys.exit(0)
 
         try:
             self.loop.run()
