@@ -1,12 +1,12 @@
 filesrc:
   name: "source"
-  location: "/home/cilsat/data/speech/berita/berita.wav"
+  location: "/home/cilsat/Dropbox/Audio/rand0.wav'
 wavparse:
   name: "wavparse"
 splitsilence:
   name: "test"
   split_thr: 0.3
-  energy_thr: -15.0
+  energy_thr: -12.0
   out_dir: "/tmp"
 fakesink:
   name: "sink"
