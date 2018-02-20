@@ -1,6 +1,6 @@
 import numpy as np
-from speechpy.feature import mfcc
 from scipy.stats import multivariate_normal as mn
+from ..feats.features import FrameGenerator
 
 
 class FrameDetector(object):
@@ -28,6 +28,8 @@ class FrameDetector(object):
         self.ciy = None
         self.my = None
 
+        self.fg = FrameGenerator(self.samplerate)
+
     def is_silent(self, block):
         rms = np.mean(np.abs(block))
         if rms < self.energy_thr:
@@ -53,10 +55,18 @@ class FrameDetector(object):
         z = (mz.sum() - mx.sum() - my.sum())/self.fb_size
         return z*1.82
 
+    def vad(self):
+        if not self.is_full():
+            return np.zeros((self.num_coeffs,))
+        else:
+            energy = np.mean(self.fb, axis=0)
+            if energy.mean() < self.energy_thr:
+                return energy
+            else:
+                return np.zeros((self.num_coeffs,))
+
     def push_block(self, block):
-        frames = mfcc(block, sampling_frequency=self.samplerate,
-                      frame_stride=0.01, num_cepstral=self.num_coeffs,
-                      dc_elimination=False)
+        frames = self.fg.lmfe(block)
 
         if self.fb_idx + len(frames) < self.fb_size:
             self.fb[self.fb_idx:self.fb_idx + len(frames)] = frames
@@ -69,6 +79,7 @@ class FrameDetector(object):
                 self.fb[:-len(frames)] = self.fb[len(frames):]
             self.fb[-len(frames):] = frames
             self.fb_idx = self.fb_size
+        return self.vad()
 
     def is_full(self):
         return self.fb_idx == self.fb_size
