@@ -12,6 +12,7 @@ import soundfile as sf
 from queue import Queue
 from threading import Thread
 from tempfile import mkstemp
+from subprocess import run
 from scribe.segment.detector import FrameDetector
 import logging
 import gi
@@ -72,8 +73,12 @@ class GstPlugin(GstBase.BaseTransform):
 
         self.samplerate = 16000
         self.split_thr = 0.3
-        self.energy_thr = 10.5
+        self.energy_thr = 15.0
         self.out_dir = "/tmp"
+
+        self.lium = '/home/cilsat/down/prog/lium_spkdiarization-8.4.1.jar'
+        self.ubm = '/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm'
+        self.gmm = '/home/cilsat/data/speech/rapat/gmm/120s_all_r2/spk.gmm'
 
         self.blk_q = Queue()
         self.sentinel = object()
@@ -138,7 +143,9 @@ class GstPlugin(GstBase.BaseTransform):
         # silence length threshold in samples
         sil_len_thr = self.split_thr
         energy_thr = self.energy_thr
+        # Number of frames to buffer within detector
         buffer_size = 20
+        # Latency due to buffering, in samples
         latency = int(buffer_size * 0.01 * self.samplerate)
 
         fd = FrameDetector(self.samplerate, fb_size=buffer_size,
@@ -164,10 +171,23 @@ class GstPlugin(GstBase.BaseTransform):
             4), suffix='.wav', dir=self.out_dir)
         sf.write(name, sample_buffer, samplerate=self.samplerate,
                  subtype='PCM_16')
-        logger.debug("%d %s" % (fd, name))
+
+        # Speaker Identification
+        frame_num = int(len(sample_buffer) * 100 / self.samplerate)
+        init_seg = name.replace('.wav', '.uem.seg')
+        fin_seg = name.replace('.wav', '.seg')
+        log_seg = name.replace('.wav', '.log')
+        with open(init_seg, 'w') as f:
+            f.write(name + ' 1 0 ' + str(frame_num) + ' U U U S1')
+        self.test(self.lium, init_seg, name, fin_seg,
+                  self.gmm, self.ubm, name, log_seg)
+        hyp = self.parse_lium_seg(fin_seg)
+
+        logger.debug("%d %s %s" % (fd, name, hyp))
+
         return (fd, name)
 
-    def test(lium, seg, wav, iseg, gmm, ubm, name, log):
+    def test(self, lium, seg, wav, iseg, gmm, ubm, name, log):
         # identify speaker segments
         cmd = [
             'java', '-cp', lium, 'fr.lium.spkDiarization.programs.Identification',
@@ -178,6 +198,11 @@ class GstPlugin(GstBase.BaseTransform):
 
         with open(log, 'a') as f:
             run(cmd, stderr=f)
+
+    def parse_lium_seg(self, seg):
+        with open(seg) as f:
+            hyp = int(f.read().split('#')[-1][1:-1])
+        return hyp
 
 
 GObject.type_register(GstPlugin)

@@ -1,8 +1,19 @@
 filesrc:
   name: "source"
-  location: "/home/cilsat/dev/scribe/test/cluster/rand2.wav"
+  location: "/home/cilsat/dev/scribe/test/cluster/rand0.wav"
 wavparse:
   name: "wavparse"
+  #audiodynamic:
+  #  name: "compressor"
+  #  characteristics: "soft-knee"
+  #  mode: "compressor"
+  #  threshold: 0.15
+  #  ratio: 0.01
+  #volume:
+  #  name: "gain"
+  #  volume: 2.0
+  #level:
+  #  name: "level"
 splitsilence:
   name: "test"
   split_thr: 0.25
