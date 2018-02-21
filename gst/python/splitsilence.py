@@ -7,13 +7,12 @@
 #
 # Split file/stream into separate files at silence
 #
-from queue import Queue
-from threading import Thread
 import numpy as np
 import soundfile as sf
-from ... segment.detector import FrameDetector
-from speechpy.feature import mfcc
+from queue import Queue
+from threading import Thread
 from tempfile import mkstemp
+from scribe.segment.detector import FrameDetector
 import logging
 import gi
 gi.require_version('Gst', '1.0')
@@ -72,11 +71,9 @@ class GstPlugin(GstBase.BaseTransform):
         GstBase.BaseTransform.__init__(self)
 
         self.samplerate = 16000
-        self.props = {
-            'split_thr': 0.3,
-            'energy_thr': -15,
-            'out_dir': '/tmp'
-        }
+        self.split_thr = 0.3
+        self.energy_thr = 10.5
+        self.out_dir = "/tmp"
 
         self.blk_q = Queue()
         self.sentinel = object()
@@ -84,32 +81,31 @@ class GstPlugin(GstBase.BaseTransform):
         print_t = Thread(target=self.segment, args=())
         print_t.start()
 
-    def set_property(self, prop, val):
-        self.props[prop] = val
-
-    def get_property(self, prop):
-        return self.props[prop]
+    def do_stop(self):
+        self.blk_q.put(self.sentinel)
+        return
 
     def do_set_property(self, prop, val):
         if prop.name == 'split_thr':
-            self.props['split_thr'] = val
+            self.split_thr = val
         if prop.name == 'energy_thr':
-            self.props['energy_thr'] = val
+            self.energy_thr = val
         if prop.name == 'blocksize':
-            self.props['blocksize'] = val
+            self.blocksize = val
         if prop.name == 'out_dir':
-            self.props['out_dir'] = val
+            self.out_dir = val
 
     def do_get_property(self, prop):
         val = None
         if prop.name == 'split_thr':
-            val = self.props['split_thr']
-        if prop.name == 'energy_thr':
-            val = self.props['energy_thr']
-        if prop.name == 'blocksize':
-            val = self.props['blocksize']
-        if prop.name == 'out_dir':
-            val = self.props['out_dir']
+            val = self.split_thr
+        elif prop.name == 'energy_thr':
+            val = self.energy_thr
+        elif prop.name == 'blocksize':
+            val = self.blocksize
+        elif prop.name == 'out_dir':
+            val = self.out_dir
+        return val
 
     def do_transform_ip(self, buf):
         """
@@ -122,9 +118,6 @@ class GstPlugin(GstBase.BaseTransform):
         self.blk_q.put(bmap.data)
 
         return Gst.FlowReturn.OK
-
-    def quit(self):
-        self.blk_q.put(self.sentinel)
 
     def copy_data(self):
         with sf.SoundFile('copy.wav', mode='w', samplerate=16000,
@@ -139,35 +132,52 @@ class GstPlugin(GstBase.BaseTransform):
         a specified number of silent blocks are detected, after which the
         buffer is dumped into a file.
         """
-        # energy_thr = 10**(0.1 *
-        # self.props['energy_thr'])*np.iinfo(np.int16).max
-        latency = self.samplerate
         sample_buffer = []
         out_segments = []
+        # TODO set properties through Gst getter setter
         # silence length threshold in samples
-        sil_len_thr = self.props['split_thr']
-        energy_thr = self.props['energy_thr']
+        sil_len_thr = self.split_thr
+        energy_thr = self.energy_thr
+        buffer_size = 20
+        latency = int(buffer_size * 0.01 * self.samplerate)
 
-        fd = FrameDetector(self.samplerate, fb_size=latency, num_cepstrals=13,
-                           num_filters=20, energy_thr=energy_thr,
-                           sil_len_thr=sil_len_thr)
+        fd = FrameDetector(self.samplerate, fb_size=buffer_size,
+                           num_cepstrals=13, num_filters=20,
+                           energy_thr=energy_thr, sil_len_thr=sil_len_thr)
 
-        for raw in iter(self.blk_q.get, self.sentinel):
-            block = np.fromstring(raw, dtype=np.int16)
-            sample_buffer.extend(block)
-            fd.push_block(block)
-            if fd.is_voiced(len(block)):
-                out_segments.append(self.on_split(sample_buffer))
-                sample_buffer = []
+        for n, raw in enumerate(iter(self.blk_q.get, self.sentinel)):
+            blk = np.fromstring(raw, dtype=np.int16)
+            fd.push_block(blk)
+            voiced = fd.is_voiced()
+            if voiced == 2:
+                out = self.on_split(n, sample_buffer[:-latency])
+                len_before = len(sample_buffer)
+                out_segments.append(out)
+                sample_buffer = sample_buffer[-latency:]
+            elif voiced == 0:
+                sample_buffer.extend(blk)
 
-        out_segments.append(self.on_split(sample_buffer))
+        out_segments.append(self.on_split(n, sample_buffer))
 
-    def on_split(self, sample_buffer):
-        fd, name = mkstemp(suffix='.wav', dir=self.props['out_dir'])
+    def on_split(self, blk_id, sample_buffer):
+        fd, name = mkstemp(prefix=str(blk_id).zfill(
+            4), suffix='.wav', dir=self.out_dir)
         sf.write(name, sample_buffer, samplerate=self.samplerate,
                  subtype='PCM_16')
         logger.debug("%d %s" % (fd, name))
         return (fd, name)
+
+    def test(lium, seg, wav, iseg, gmm, ubm, name, log):
+        # identify speaker segments
+        cmd = [
+            'java', '-cp', lium, 'fr.lium.spkDiarization.programs.Identification',
+            '--sInputMask=' + seg, '--fInputMask=' + wav, '--sOutputMask=' + iseg,
+            '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+            '--tInputMask=' + gmm, '--sTop=5,' + ubm, '--sSetLabel=add', name
+        ]
+
+        with open(log, 'a') as f:
+            run(cmd, stderr=f)
 
 
 GObject.type_register(GstPlugin)

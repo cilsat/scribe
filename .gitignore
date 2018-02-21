@@ -1,4 +1,6 @@
 __pycache__
 *.pyc
-*.wav
+.wav
+.ropeproject
+.vscode
 test/

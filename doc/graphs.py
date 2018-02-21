@@ -150,6 +150,7 @@ def dfd_offline(name='dfd_offline', form='png',
 def dfd_online(name='dfd_online', form='png',
                label='Data flow diagram for online identification system'):
     dot = gv.Digraph(name=name, comment=label, format=form)
+    dot.graph_attr['rankdir'] = 'LR'
 
     # Data nodes
     dot.attr('node', shape='box')

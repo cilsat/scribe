@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
-from testpipe import Pipeliner
-from python.splitsilence import GstPlugin
+from scribe.gst.testpipe import Pipeliner
 import logging
 
 logger = logging.getLogger(__name__)

@@ -51,12 +51,18 @@ class Pipeliner:
         for plugin, props in cfg.items():
             # make element if non-test plugin
             if plugin != self.plugin:
-                logger.debug("Adding %s to the pipeline" % plugin)
                 element = Gst.ElementFactory.make(plugin)
+                logger.debug("Adding %s to the pipeline" % plugin)
+                if plugin == 'onlinegmmdecodefaster':
+                    self.decoder = element
             else:
-                plugin_module = import_module('python.' + self.plugin)
+                plugin_module = import_module(
+                    'scribe.gst.python.' + self.plugin)
                 element = plugin_module.GstPlugin()
+                logger.debug("Adding %s to the pipeline" % self.plugin)
+                self.element = element
             for k, v in props.items():
+                logger.debug("Setting %s with value %s" % (k, v))
                 # add exception for pesky caps and set properties
                 if k == 'caps':
                     element.set_property(k, Gst.caps_from_string(v))

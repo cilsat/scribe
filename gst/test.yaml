@@ -1,12 +1,12 @@
 filesrc:
   name: "source"
-  location: "/home/cilsat/Dropbox/Audio/rand0.wav'
+  location: "/home/cilsat/dev/scribe/test/cluster/rand2.wav"
 wavparse:
   name: "wavparse"
 splitsilence:
   name: "test"
-  split_thr: 0.3
+  split_thr: 0.25
   energy_thr: -12.0
   out_dir: "/tmp"
-fakesink:
+autoaudiosink:
   name: "sink"

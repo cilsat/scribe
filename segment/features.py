@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.fftpack import dct
-from . segmentaxis import segment_axis as segax
+from .segmentaxis import segment_axis as segax
 
 
 class FrameGenerator(object):
@@ -35,16 +35,12 @@ class FrameGenerator(object):
             out[second] = (right - x[second]) / (right - middle)
             return out
 
-        rfft_length = int(self.fft_length / 2) + 1
-
         mels = np.linspace(freq_to_mel(self.low_freq),
                            freq_to_mel(self.high_freq), self.num_filters + 2)
-
         hertz = mel_to_freq(mels)
-
+        rfft_length = int(self.fft_length / 2) + 1
         freq_bins = (np.floor((rfft_length + 1) * hertz /
                               self.samplerate)).astype(int)
-
         filterbank = np.zeros((self.num_filters, rfft_length))
 
         for i in range(self.num_filters):

@@ -1,26 +1,29 @@
 import numpy as np
 from scipy.stats import multivariate_normal as mn
-from . features import FrameGenerator
+from .features import FrameGenerator
+
+SIG_VOICED = 0
+SIG_UNVOICED = 1
+SIG_SPLIT = 2
 
 
 class FrameDetector(object):
     def __init__(self, samplerate, fb_size, num_cepstrals=13, num_filters=40,
-                 energy_thr=-9.0, sil_len_thr=0.25):
+                 energy_thr=-9.0, sil_len_thr=0.25, block_size=2048):
         self.samplerate = samplerate
         # internal buffering
         self.fb_size = fb_size*2
         self.fb = np.empty((self.fb_size, int(num_filters)))
-        self.fb.fill(np.nan)
         self.fb_idx = 0
         self.num_filters = num_filters
-
-        self.sb = []
+        self.block_size = block_size
 
         # is_silent vars
         self.sil_sum = 0
         self.can_split = False
         self.energy_thr = energy_thr
-        self.sil_len_thr = sil_len_thr
+        self.sil_len_thr = np.round(sil_len_thr * self.samplerate /
+                                    self.block_size)
 
         # is_turn vars
         self.y = None
@@ -43,7 +46,7 @@ class FrameDetector(object):
         return False
 
     def glr(self):
-        if not self.is_full():
+        if self.fb_idx != self.fb_size:
             return 0
         half = int(0.5 * self.fb_size)
         fx = self.fb[:half]
@@ -56,7 +59,7 @@ class FrameDetector(object):
         return z*1.82
 
     def vad(self):
-        if not self.is_full():
+        if self.fb_idx != self.fb_size:
             return np.zeros((self.num_filters,))
         else:
             energy = np.mean(self.fb, axis=0)
@@ -66,24 +69,23 @@ class FrameDetector(object):
             else:
                 return np.zeros((self.num_filters,))
 
-    def is_voiced(self, block_size):
-        sil_block_thr = np.round(self.sil_len_thr * self.samplerate /
-                                 block_size)
-        if not self.is_full():
-            return False
-        elif np.mean(self.fb) > self.energy_thr:
+    def is_voiced(self):
+        if self.fb_idx != self.fb_size:
+            return SIG_UNVOICED
+        elif np.mean(self.fb) < self.energy_thr:
             self.sil_sum += 1
-            if self.can_split and self.sil_sum >= sil_block_thr:
+            if self.can_split and self.sil_sum >= self.sil_len_thr:
                 self.can_split = False
-                return False
+                return SIG_SPLIT
+            else:
+                return SIG_UNVOICED
         else:
             self.sil_sum = 0
             self.can_split = True
-        return True
+            return SIG_VOICED
 
     def push_block(self, block):
         frames = self.fg.lmfe(block)
-
         len_f = len(frames)
 
         if self.fb_idx + len_f < self.fb_size:
@@ -97,6 +99,3 @@ class FrameDetector(object):
                 self.fb[:-len_f] = self.fb[len_f:]
             self.fb[-len_f:] = frames
             self.fb_idx = self.fb_size
-
-    def is_full(self):
-        return self.fb_idx == self.fb_size
