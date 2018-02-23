@@ -1,23 +1,37 @@
 filesrc:
-  name: "source"
-  location: "/home/cilsat/dev/scribe/test/cluster/rand0.wav"
-wavparse:
-  name: "wavparse"
-  #audiodynamic:
-  #  name: "compressor"
-  #  characteristics: "soft-knee"
-  #  mode: "compressor"
-  #  threshold: 0.15
-  #  ratio: 0.01
-  #volume:
-  #  name: "gain"
-  #  volume: 2.0
-  #level:
-  #  name: "level"
-splitsilence:
-  name: "test"
-  split_thr: 0.25
-  energy_thr: -12.0
-  out_dir: "/tmp"
-autoaudiosink:
+  name: "src"
+  location: "/home/cilsat/Dropbox/Audio/rand0.wav"
+decodebin:
+  name: "decodebin"
+audioconvert:
+  name: "convert"
+audioresample:
+  name: "audioresample"
+audiocheblimit:
+  name: "hpf"
+  mode: "high-pass"
+  cutoff: 300
+audiodynamic:
+  name: "compressor"
+  characteristics: "soft-knee"
+  mode: "compressor"
+  threshold: 0.15
+  ratio: 0.01
+volume:
+  name: "gain"
+  volume: 2.0
+audioconvert:
+  name: "convert"
+streamextractor:
+  name: "custom"
+audioconvert:
+  name: "convert"
+onlinegmmdecodefaster:
+  name: "kaldi"
+  model: "/home/cilsat/src/kaldi-gstreamer-server/models/prosa_2018_0.1/final.mdl"
+  fst: "/home/cilsat/src/kaldi-gstreamer-server/models/prosa_2018_0.1/HCLG.fst"
+  word-syms: "/home/cilsat/src/kaldi-gstreamer-server/models/prosa_2018_0.1/words.txt"
+  silence-phones: "6:39:43"
+filesink:
   name: "sink"
+  location: "/dev/stdout"

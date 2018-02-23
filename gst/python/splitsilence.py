@@ -13,7 +13,7 @@ from queue import Queue
 from threading import Thread
 from tempfile import mkstemp
 from subprocess import run
-from scribe.segment.detector import FrameDetector
+from scribe.segment.detector import TurnDetector
 import logging
 import gi
 gi.require_version('Gst', '1.0')
@@ -65,6 +65,27 @@ class GstPlugin(GstBase.BaseTransform):
             'Directory to store the resulting files',
             None,
             GObject.PARAM_READWRITE
+        ),
+        'lium_path': (
+            GObject.TYPE_STRING,
+            'Path to LIUM JAR',
+            'Path to LIUM JAR',
+            '/home/cilsat/net/Files/lium_spkdiarization-8.4.1.jar',
+            GObject.PARAM_READWRITE
+        ),
+        'ubm_path': (
+            GObject.TYPE_STRING,
+            'Path to UBM',
+            'Path to a UBM in alize format',
+            '/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm',
+            GObject.PARAM_READWRITE
+        ),
+        'gmm_path': (
+            GObject.TYPE_STRING,
+            'Path to GMM',
+            'Path to speaker model in LIUM GMM format',
+            '/home/cilsat/data/speech/rapat/spk.gmm',
+            GObject.PARAM_READWRITE
         )
     }
 
@@ -76,9 +97,9 @@ class GstPlugin(GstBase.BaseTransform):
         self.energy_thr = 15.0
         self.out_dir = "/tmp"
 
-        self.lium = '/home/cilsat/down/prog/lium_spkdiarization-8.4.1.jar'
+        self.lium = '/home/cilsat/net/Files/lium_spkdiarization-8.4.1.jar'
         self.ubm = '/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm'
-        self.gmm = '/home/cilsat/data/speech/rapat/gmm/120s_all_r2/spk.gmm'
+        self.gmm = '/home/cilsat/data/speech/rapat/gmm/120_rapat.gmm'
 
         self.blk_q = Queue()
         self.sentinel = object()
@@ -118,7 +139,7 @@ class GstPlugin(GstBase.BaseTransform):
         block data cannot be written back into stream, we must instead queue it
         and use it from a different thread.
         """
-        # Gst.info("timestamp(buffer):%s" % (Gst.TIME_ARGS(buf.pts)))
+        Gst.info("timestamp(buffer):%s" % (Gst.TIME_ARGS(buf.pts)))
         res, bmap = buf.map(Gst.MapFlags.READ)
         self.blk_q.put(bmap.data)
 
@@ -148,14 +169,13 @@ class GstPlugin(GstBase.BaseTransform):
         # Latency due to buffering, in samples
         latency = int(buffer_size * 0.01 * self.samplerate)
 
-        fd = FrameDetector(self.samplerate, fb_size=buffer_size,
-                           num_cepstrals=13, num_filters=20,
-                           energy_thr=energy_thr, sil_len_thr=sil_len_thr)
+        td = TurnDetector(self.samplerate, fb_size=buffer_size,
+                          num_cepstrals=13, num_filters=20,
+                          energy_thr=energy_thr, sil_len_thr=sil_len_thr)
 
         for n, raw in enumerate(iter(self.blk_q.get, self.sentinel)):
             blk = np.fromstring(raw, dtype=np.int16)
-            fd.push_block(blk)
-            voiced = fd.is_voiced()
+            voiced = td.push_block(blk)
             if voiced == 2:
                 out = self.on_split(n, sample_buffer[:-latency])
                 len_before = len(sample_buffer)
@@ -163,8 +183,6 @@ class GstPlugin(GstBase.BaseTransform):
                 sample_buffer = sample_buffer[-latency:]
             elif voiced == 0:
                 sample_buffer.extend(blk)
-
-        out_segments.append(self.on_split(n, sample_buffer))
 
     def on_split(self, blk_id, sample_buffer):
         fd, name = mkstemp(prefix=str(blk_id).zfill(
@@ -174,33 +192,35 @@ class GstPlugin(GstBase.BaseTransform):
 
         # Speaker Identification
         frame_num = int(len(sample_buffer) * 100 / self.samplerate)
-        init_seg = name.replace('.wav', '.uem.seg')
-        fin_seg = name.replace('.wav', '.seg')
-        log_seg = name.replace('.wav', '.log')
-        with open(init_seg, 'w') as f:
-            f.write(name + ' 1 0 ' + str(frame_num) + ' U U U S1')
-        self.test(self.lium, init_seg, name, fin_seg,
-                  self.gmm, self.ubm, name, log_seg)
-        hyp = self.parse_lium_seg(fin_seg)
-
-        logger.debug("%d %s %s" % (fd, name, hyp))
+        hyp = self.identify_speaker(name, frame_num)
+        print("%d %s %s" % (fd, name, hyp))
 
         return (fd, name)
 
-    def test(self, lium, seg, wav, iseg, gmm, ubm, name, log):
-        # identify speaker segments
+    def identify_speaker(self, name, sample_length):
+        """
+        Quick and dirty speaker identification with LIUM.
+        """
+        init_seg = name.replace('.wav', '.uem.seg')
+        fin_seg = name.replace('.wav', '.seg')
+        log_seg = name.replace('.wav', '.log')
+        # Prepare initial segmentation file
+        with open(init_seg, 'w') as f:
+            f.write(name + ' 1 0 ' + str(sample_length) + ' U U U S1')
+        # Call LIUM
         cmd = [
-            'java', '-cp', lium, 'fr.lium.spkDiarization.programs.Identification',
-            '--sInputMask=' + seg, '--fInputMask=' + wav, '--sOutputMask=' + iseg,
+            'java', '-cp', self.lium,
+            'fr.lium.spkDiarization.programs.Identification',
+            '--sInputMask=' + init_seg, '--fInputMask=' + name,
+            '--sOutputMask=' + fin_seg,
             '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
-            '--tInputMask=' + gmm, '--sTop=5,' + ubm, '--sSetLabel=add', name
+            '--tInputMask=' + self.gmm, '--sTop=5,' + self.ubm,
+            '--sSetLabel=add', name
         ]
-
-        with open(log, 'a') as f:
+        with open(log_seg, 'a') as f:
             run(cmd, stderr=f)
-
-    def parse_lium_seg(self, seg):
-        with open(seg) as f:
+        # Read results
+        with open(fin_seg) as f:
             hyp = int(f.read().split('#')[-1][1:-1])
         return hyp
 
