@@ -1,32 +1,31 @@
-import sys
+"""Module containing Pipeliner class."""
 import gi
+
+gi.require_version('Gst', '1.0')
+from gi.repository import Gst, GLib
+Gst.init(None)
+
+import sys
 import yaml
 import logging
 
 from scribe.segment.detector import TurnDetector
-from threading import Thread
-
 from queue import Queue
 from importlib import import_module
-gi.require_version('Gst', '1.0')
-from gi.repository import Gst, GLib
-
-Gst.init(None)
 
 logger = logging.getLogger(__name__)
 
 
 class Pipeliner(object):
-    """
-    Custom class to initialize and run Gst pipeline for custom python Gst
-    plugin given a YAML config file.
-    """
+    """Utility class to automate creation of GST pipeline."""
 
     def __init__(self, _plug, _cfg):
+        """Initialize Pipeliner class."""
         # Gst loop
         self.gst_loop = GLib.MainLoop()
         self.pipeline = Gst.Pipeline()
         self.custom = _plug
+        self.plugins = {}
 
         # Turn detection loop
         self.blk_q = Queue()
@@ -42,62 +41,76 @@ class Pipeliner(object):
         except Exception as e:
             sys.exit(type(e).__name__ + ': ' + str(e))
 
-        bus = self.pipeline.get_bus()
-        bus.add_signal_watch()
-        bus.connect('message::eos', self.on_eos)
-        bus.connect('message::error', self.on_error)
-
-        ready = self.pipeline.set_state(Gst.State.READY)
-        if ready == Gst.StateChangeReturn.FAILURE:
-            logger.debug("Error readying pipeline")
-            sys.exit(0)
-        else:
-            logger.debug("Pipeline READY")
-
     def prep(self, cfg):
-        """
-        Prepare Gst pipeline from specified yaml config file.
-        """
+        """Prepare Gst pipeline from specified yaml config file."""
         prev_element = None
         for plugin, props in cfg.items():
             # make element if non-test plugin
             if plugin != self.custom:
-                element = Gst.ElementFactory.make(plugin)
-                logger.debug("Adding %s to the pipeline" % plugin)
-                if plugin == 'onlinegmmdecodefaster':
-                    self.decoder = element
+                element = Gst.ElementFactory.make(props['name'], plugin)
             else:
                 plugin_module = import_module(
-                    'scribe.gst.python.' + self.custom)
+                    'scribe.gst.python.' + props['name'])
                 element = plugin_module.GstPlugin(self.blk_q)
                 logger.debug("Adding %s to the pipeline" % self.custom)
                 self.element = element
+
+            # set properties
             for k, v in props.items():
-                logger.debug("Setting %s with value %s" % (k, v))
                 # add exception for pesky caps and set properties
                 if k == 'caps':
                     element.set_property(k, Gst.caps_from_string(v))
+                elif k == 'name':
+                    continue
                 else:
                     element.set_property(k, v)
-            # add element to pipeline and link previous element to current one
-            self.pipeline.add(element)
-            if prev_element:
-                prev_element.link(element)
-            prev_element = element
 
-    def on_eos(self, _bus, _msg):
+            # add elements before linking them
+            self.plugins[plugin] = element
+            self.pipeline.add(element)
+            logger.debug("Adding %s to the pipeline with name %s" %
+                    (props['name'], element.get_property('name')))
+
+        for plugin, element in self.plugins.items():
+            if prev_element:
+                logger.debug("Linking %s to %s" % (prev_plugin, plugin))
+                # link differently for decodebin
+                if prev_plugin == 'decoder':
+                    prev_element.connect('pad-added', self._connect_decoder)
+                else:
+                    prev_element.link(element)
+            prev_plugin, prev_element = plugin, element
+
+        # setup signal handling
+        self.bus = self.pipeline.get_bus()
+        self.bus.add_signal_watch()
+        self.bus.enable_sync_message_emission()
+        self.bus.connect('message::eos', self._on_eos)
+        self.bus.connect('message::error', self._on_error)
+
+        # set pipeline to ready
+        self.pipeline.set_state(Gst.State.READY)
+        logger.info("Pipeline READY")
+
+    def _connect_decoder(self, element, pad):
+        pad.link(self.plugins['converter1'].get_static_pad("sink"))
+        logger.info("Connected audio decoder")
+
+    def _on_eos(self, _bus, _msg):
+        self.plugins['sink'].set_state(Gst.State.NULL)
+        self.plugins['sink'].set_state(Gst.State.PLAYING)
         self.pipeline.set_state(Gst.State.NULL)
 
-    def on_error(self, _bus, _msg):
+    def _on_error(self, _bus, _msg):
         err, dbg = _msg.parse_error()
         logger.debug("%s: %s" % (_msg.src.get_name(), err.message))
         self.on_eos(_bus, _msg)
 
     def play(self):
-        ret = self.pipeline.set_state(Gst.State.PLAYING)
-        if ret == Gst.StateChangeReturn.FAILURE:
-            logger.debug("Error opening pipeline")
-            sys.exit(0)
+        self.pipeline.set_state(Gst.State.PAUSED)
+        self.plugins['sink'].set_state(Gst.State.PLAYING)
+        self.pipeline.set_state(Gst.State.PLAYING)
+        self.pipeline.set_state(Gst.State.PLAYING)
 
         try:
             self.gst_loop.run()

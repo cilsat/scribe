@@ -1,37 +1,35 @@
-filesrc:
-  name: "src"
+# names must be unique!
+src:
+  name: "filesrc"
   location: "/home/cilsat/Dropbox/Audio/rand0.wav"
-decodebin:
+decoder:
   name: "decodebin"
-audioconvert:
-  name: "convert"
-audioresample:
+converter1:
+  name: "audioconvert"
+resampler:
   name: "audioresample"
-audiocheblimit:
-  name: "hpf"
+filter:
+  name: "audiocheblimit"
   mode: "high-pass"
   cutoff: 300
-audiodynamic:
-  name: "compressor"
+compressor:
+  name: "audiodynamic"
   characteristics: "soft-knee"
   mode: "compressor"
   threshold: 0.15
   ratio: 0.01
-volume:
-  name: "gain"
-  volume: 2.0
-audioconvert:
-  name: "convert"
-streamextractor:
-  name: "custom"
-audioconvert:
-  name: "convert"
-onlinegmmdecodefaster:
-  name: "kaldi"
-  model: "/home/cilsat/src/kaldi-gstreamer-server/models/prosa_2018_0.1/final.mdl"
-  fst: "/home/cilsat/src/kaldi-gstreamer-server/models/prosa_2018_0.1/HCLG.fst"
-  word-syms: "/home/cilsat/src/kaldi-gstreamer-server/models/prosa_2018_0.1/words.txt"
+converter2:
+  name: "audioconvert"
+pyextractor:
+  name: "streamextractor"
+converter3:
+  name: "audioconvert"
+asr:
+  name: "onlinegmmdecodefaster"
+  model: "/home/cilsat/src/kaldi-gstreamer-server/models/final.mdl"
+  fst: "/home/cilsat/src/kaldi-gstreamer-server/models/HCLG.fst"
+  word-syms: "/home/cilsat/src/kaldi-gstreamer-server/models/words.txt"
   silence-phones: "6:39:43"
-filesink:
-  name: "sink"
+sink:
+  name: "filesink"
   location: "/dev/stdout"
