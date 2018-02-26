@@ -1,3 +1,4 @@
+"""Module that implements custom GstPlugin for speaker change detection."""
 #!/usr/bin/env python
 # -*- Mode: Python -*-
 # vi:si:et:sw=4:sts=4:ts=4
@@ -26,6 +27,8 @@ caps = 'audio/x-raw,format=S16LE,rate=16000,channels=1'
 
 
 class GstPlugin(GstBase.BaseTransform):
+    """Class that overrides Gst Plugin instantiation."""
+
     __gstmetadata__ = ('SplitSilence Python',
                        'Transform',
                        'Split buffer into files at silence',
@@ -90,6 +93,7 @@ class GstPlugin(GstBase.BaseTransform):
     }
 
     def __init__(self):
+        """Initialize GstPlugin class."""
         GstBase.BaseTransform.__init__(self)
 
         self.samplerate = 16000
@@ -108,10 +112,12 @@ class GstPlugin(GstBase.BaseTransform):
         print_t.start()
 
     def do_stop(self):
+        """Call on stop."""
         self.blk_q.put(self.sentinel)
         return
 
     def do_set_property(self, prop, val):
+        """Set plugin properties."""
         if prop.name == 'split_thr':
             self.split_thr = val
         if prop.name == 'energy_thr':
@@ -122,6 +128,7 @@ class GstPlugin(GstBase.BaseTransform):
             self.out_dir = val
 
     def do_get_property(self, prop):
+        """Get plugin properties."""
         val = None
         if prop.name == 'split_thr':
             val = self.split_thr
@@ -135,17 +142,19 @@ class GstPlugin(GstBase.BaseTransform):
 
     def do_transform_ip(self, buf):
         """
-        This function is automatically called by Gst at each iteration. As the
-        block data cannot be written back into stream, we must instead queue it
-        and use it from a different thread.
+        Call each time buffer is received.
+
+        As block data cannot be written back into the stream, we must instead
+        queue it and use it from a different thread.
         """
-        Gst.info("timestamp(buffer):%s" % (Gst.TIME_ARGS(buf.pts)))
+        logger.debug("timestamp(buffer):%s" % (Gst.TIME_ARGS(buf.pts)))
         res, bmap = buf.map(Gst.MapFlags.READ)
         self.blk_q.put(bmap.data)
 
         return Gst.FlowReturn.OK
 
     def copy_data(self):
+        """Write buffered data into temporary WAV file."""
         with sf.SoundFile('copy.wav', mode='w', samplerate=16000,
                           channels=1, subtype='PCM_16') as f:
             for raw in iter(self.blk_q.get, self.sentinel):
@@ -153,8 +162,10 @@ class GstPlugin(GstBase.BaseTransform):
                 f.write(blk)
 
     def segment(self):
-        """Gets audio blocks from stream and decides whether block is silent
-        or non-silent. Accumulates non-silent blocks into a buffer until
+        """
+        Get audio blocks from stream and decides whether block is silent.
+
+        Accumulates non-silent blocks into a buffer until
         a specified number of silent blocks are detected, after which the
         buffer is dumped into a file.
         """
@@ -178,13 +189,13 @@ class GstPlugin(GstBase.BaseTransform):
             voiced = td.push_block(blk)
             if voiced == 2:
                 out = self.on_split(n, sample_buffer[:-latency])
-                len_before = len(sample_buffer)
                 out_segments.append(out)
                 sample_buffer = sample_buffer[-latency:]
             elif voiced == 0:
                 sample_buffer.extend(blk)
 
     def on_split(self, blk_id, sample_buffer):
+        """Call on split."""
         fd, name = mkstemp(prefix=str(blk_id).zfill(
             4), suffix='.wav', dir=self.out_dir)
         sf.write(name, sample_buffer, samplerate=self.samplerate,
@@ -193,14 +204,12 @@ class GstPlugin(GstBase.BaseTransform):
         # Speaker Identification
         frame_num = int(len(sample_buffer) * 100 / self.samplerate)
         hyp = self.identify_speaker(name, frame_num)
-        print("%d %s %s" % (fd, name, hyp))
+        logger.debug("%d %s %s" % (fd, name, hyp))
 
         return (fd, name)
 
     def identify_speaker(self, name, sample_length):
-        """
-        Quick and dirty speaker identification with LIUM.
-        """
+        """Quick and dirty speaker identification with LIUM."""
         init_seg = name.replace('.wav', '.uem.seg')
         fin_seg = name.replace('.wav', '.seg')
         log_seg = name.replace('.wav', '.log')
@@ -227,3 +236,4 @@ class GstPlugin(GstBase.BaseTransform):
 
 GObject.type_register(GstPlugin)
 __gstelementfactory__ = ("splitsilence", Gst.Rank.NONE, GstPlugin)
+

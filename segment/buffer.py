@@ -37,7 +37,7 @@ class Buffer(object):
             self.data[-len_s:] = samples
 
     def pop(self, idx=None):
-        """Remove samples from buffer."""
+        """Pop a number of samples from buffer."""
         if not idx:
             samples = np.copy(self.data[:self.idx])
             self.data[:] = np.empty(self.data.shape)

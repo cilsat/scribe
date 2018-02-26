@@ -12,6 +12,9 @@ gi.require_version('Gst', '1.0')
 gi.require_version('GstBase', '1.0')
 from gi.repository import Gst, GObject, GstBase
 from queue import Queue
+import logging
+
+logger = logging.getLogger(__name__)
 
 Gst.init(None)
 
@@ -37,23 +40,26 @@ class GstPlugin(GstBase.BaseTransform):
     __gsttemplates__ = (_src_template, _sink_template)
 
     def __init__(self, blk_q=Queue()):
+        """Initialize the Gst Plugin."""
         GstBase.BaseTransform.__init__(self)
         self.blk_q = blk_q
+        logger.debug("Initialize GstPlugin.")
 
     def do_transform_ip(self, buf):
         """
-        This function is automatically called by Gst at each iteration. As the
-        block data cannot be written back into stream, we must instead queue it
-        and use it from a different thread.
+        Call each time buf is received. As the block data cannot be written
+        back into stream, we must instead queue it and use it from a different
+        thread.
         """
         timestamp = Gst.TIME_ARGS(buf.pts)
-        Gst.info("timestamp(buffer):%s  queue(buffer):%s" % (timestamp,
+        logger.debug("timestamp(buffer):%s  queue(buffer):%s" % (timestamp,
                                                              self.blk_q.qsize()))
         res, bmap = buf.map(Gst.MapFlags.READ)
-        self.blk_q.put((timestamp, bmap.data))
+        self.blk_q.put(bmap.data)
 
         return Gst.FlowReturn.OK
 
 
 GObject.type_register(GstPlugin)
 __gstelementfactory__ = ("streamextractor", Gst.Rank.NONE, GstPlugin)
+

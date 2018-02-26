@@ -47,12 +47,11 @@ class Pipeliner(object):
         for plugin, props in cfg.items():
             # make element if non-test plugin
             if plugin != self.custom:
-                element = Gst.ElementFactory.make(props['name'], plugin)
+                element = Gst.ElementFactory.make(props['type'])
             else:
                 plugin_module = import_module(
-                    'scribe.gst.python.' + props['name'])
-                element = plugin_module.GstPlugin(self.blk_q)
-                logger.debug("Adding %s to the pipeline" % self.custom)
+                    'scribe.gst.python.' + props['type'])
+                element = plugin_module.GstPlugin()
                 self.element = element
 
             # set properties
@@ -60,8 +59,8 @@ class Pipeliner(object):
                 # add exception for pesky caps and set properties
                 if k == 'caps':
                     element.set_property(k, Gst.caps_from_string(v))
-                elif k == 'name':
-                    continue
+                elif k == 'type':
+                    element.set_property('name', plugin)
                 else:
                     element.set_property(k, v)
 
@@ -69,7 +68,7 @@ class Pipeliner(object):
             self.plugins[plugin] = element
             self.pipeline.add(element)
             logger.debug("Adding %s to the pipeline with name %s" %
-                         (props['name'], element.get_property('name')))
+                         (props['type'], element.get_property('name')))
 
         for plugin, element in self.plugins.items():
             if prev_element:
@@ -114,7 +113,6 @@ class Pipeliner(object):
         self.pipeline.set_state(Gst.State.PAUSED)
         self.plugins['sink'].set_state(Gst.State.PLAYING)
         self.pipeline.set_state(Gst.State.PLAYING)
-        self.pipeline.set_state(Gst.State.PLAYING)
 
         try:
             self.gst_loop.run()
@@ -125,3 +123,4 @@ class Pipeliner(object):
             sys.exit(type(e).__name__ + ': ' + str(e))
         finally:
             self.gst_loop.quit()
+
