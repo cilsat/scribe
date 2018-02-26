@@ -7,6 +7,7 @@ import logging
 from scribe.segment.detector import TurnDetector
 from queue import Queue
 from importlib import import_module
+from threading import Thread
 
 import gi
 gi.require_version('Gst', '1.0')
@@ -26,11 +27,10 @@ class Pipeliner(object):
         self.pipeline = Gst.Pipeline()
         self.custom = _plug
         self.plugins = {}
+        self.blk_q = Queue()
 
         # Turn detection loop
-        self.blk_q = Queue()
-        self.sentinel = object()
-        self.td = TurnDetector()
+        self.td = TurnDetector(blk_q=self.blk_q)
 
         # Load Gst launch config and build pipeline
         try:
@@ -88,6 +88,9 @@ class Pipeliner(object):
         self.bus.connect('message::eos', self._on_eos)
         self.bus.connect('message::error', self._on_error)
 
+        # setup turn detector
+        self.td.start()
+
         # set pipeline to ready
         self.pipeline.set_state(Gst.State.READY)
         logger.info("Pipeline READY")
@@ -97,6 +100,7 @@ class Pipeliner(object):
         logger.info("Connected audio decoder")
 
     def _on_eos(self, _bus, _msg):
+        self.td.stop()
         self.plugins['sink'].set_state(Gst.State.NULL)
         self.plugins['sink'].set_state(Gst.State.PLAYING)
         self.pipeline.set_state(Gst.State.NULL)
