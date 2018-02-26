@@ -1,9 +1,4 @@
 """Module containing Pipeliner class."""
-import gi
-
-gi.require_version('Gst', '1.0')
-from gi.repository import Gst, GLib
-Gst.init(None)
 
 import sys
 import yaml
@@ -12,6 +7,11 @@ import logging
 from scribe.segment.detector import TurnDetector
 from queue import Queue
 from importlib import import_module
+
+import gi
+gi.require_version('Gst', '1.0')
+from gi.repository import Gst, GLib
+Gst.init(None)
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ class Pipeliner(object):
             self.plugins[plugin] = element
             self.pipeline.add(element)
             logger.debug("Adding %s to the pipeline with name %s" %
-                    (props['name'], element.get_property('name')))
+                         (props['name'], element.get_property('name')))
 
         for plugin, element in self.plugins.items():
             if prev_element:

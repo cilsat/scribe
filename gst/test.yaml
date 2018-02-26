@@ -20,8 +20,14 @@ compressor:
   ratio: 0.01
 converter2:
   name: "audioconvert"
-pyextractor:
+sid:
   name: "streamextractor"
+  #split_thr: 0.3
+  #energy_thr: -15.0
+  #out_dir: "/tmp"
+  #lium_path: "/home/cilsat/down/prog/lium_spkdiarization-8.4.1.jar"
+  #ubm_path: "/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm"
+  #gmm_path: "/home/cilsat/data/speech/rapat/gmm/120s_all_r2/spk.gmm"
 converter3:
   name: "audioconvert"
 asr:

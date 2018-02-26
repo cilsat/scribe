@@ -97,9 +97,9 @@ class GstPlugin(GstBase.BaseTransform):
         self.energy_thr = 15.0
         self.out_dir = "/tmp"
 
-        self.lium = '/home/cilsat/net/Files/lium_spkdiarization-8.4.1.jar'
+        self.lium = '/home/cilsat/down/prog/lium_spkdiarization-8.4.1.jar'
         self.ubm = '/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm'
-        self.gmm = '/home/cilsat/data/speech/rapat/gmm/120_rapat.gmm'
+        self.gmm = '/home/cilsat/data/speech/rapat/gmm/120s_all_r2/spk.gmm'
 
         self.blk_q = Queue()
         self.sentinel = object()

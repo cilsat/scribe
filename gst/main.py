@@ -7,6 +7,6 @@ logger = logging.getLogger(__name__)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    pipeline = Pipeliner('pyextractor', 'test.yaml')
+    logging.basicConfig(level=logging.DEBUG)
+    pipeline = Pipeliner('sid', 'test.yaml')
     pipeline.play()
