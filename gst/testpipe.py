@@ -28,10 +28,9 @@ class Pipeliner(object):
         self.pipeline = Gst.Pipeline()
         self.custom = _plug
         self.plugins = {}
-        self.blk_q = Queue()
 
         # Initialize turn detector
-        self.td = TurnDetector(blk_q=self.blk_q)
+        self.td = TurnDetector()
 
         # Load Gst launch config and build pipeline
         try:
@@ -53,7 +52,7 @@ class Pipeliner(object):
             else:
                 plugin_module = import_module(
                     'scribe.gst.python.' + props['type'])
-                element = plugin_module.StreamExtractor(self.blk_q)
+                element = plugin_module.StreamExtractor(self.td.blk_q)
 
             # set properties
             for k, v in props.items():
@@ -98,7 +97,6 @@ class Pipeliner(object):
         logger.info("Connected audio decoder")
 
     def _on_eos(self, _bus, _msg):
-        self.td.stop()
         self.plugins['sink'].set_state(Gst.State.NULL)
         self.pipeline.set_state(Gst.State.NULL)
 
@@ -114,9 +112,9 @@ class Pipeliner(object):
         self.pipeline.set_state(Gst.State.PLAYING)
         #self.plugins['sid'].set_state(Gst.State.PLAYING)
         #self.plugins['sink'].set_state(Gst.State.PLAYING)
-        #self.td.start()
 
         try:
+            self.td.start()
             self.gst_loop.run()
         except KeyboardInterrupt:
             self.pipeline.set_state(Gst.State.NULL)
@@ -125,4 +123,5 @@ class Pipeliner(object):
             sys.exit(type(e).__name__ + ': ' + str(e))
         finally:
             self.gst_loop.quit()
+            self.td.stop()
 

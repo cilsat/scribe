@@ -2,10 +2,12 @@
 src:
   type: "filesrc"
   location: "/home/cilsat/Dropbox/Audio/rand0.wav"
-decoder:
-  type: "decodebin"
-converter1:
-  type: "audioconvert"
+parser:
+  type: "wavparse"
+#decoder:
+#  type: "decodebin"
+#converter1:
+#  type: "audioconvert"
 #resampler:
 #  type: "audioresample"
 #filter:
