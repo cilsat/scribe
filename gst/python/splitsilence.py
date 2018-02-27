@@ -48,42 +48,42 @@ class GstPlugin(GstBase.BaseTransform):
     )
 
     __gproperties__ = {
-        'split_thr': (
+        'split-thr': (
             GObject.TYPE_FLOAT,
             'Split Threshold',
             'Length of silence before splitting',
             0.1, 10.0, 0.3,  # min, max, default
             GObject.PARAM_READWRITE | GObject.PARAM_CONSTRUCT
         ),
-        'energy_thr': (
+        'energy-thr': (
             GObject.TYPE_FLOAT,
             'Silence Threshold',
             'Level (in dB) below which signal is considered silent',
             -60.0, 60.0, -15.0,  # min, max, default
             GObject.PARAM_READWRITE | GObject.PARAM_CONSTRUCT
         ),
-        'out_dir': (
+        'out-dir': (
             GObject.TYPE_STRING,
             'Output directory',
             'Directory to store the resulting files',
             None,
             GObject.PARAM_READWRITE
         ),
-        'lium_path': (
+        'lium': (
             GObject.TYPE_STRING,
             'Path to LIUM JAR',
             'Path to LIUM JAR',
             '/home/cilsat/net/Files/lium_spkdiarization-8.4.1.jar',
             GObject.PARAM_READWRITE
         ),
-        'ubm_path': (
+        'ubm': (
             GObject.TYPE_STRING,
             'Path to UBM',
             'Path to a UBM in alize format',
             '/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm',
             GObject.PARAM_READWRITE
         ),
-        'gmm_path': (
+        'gmm': (
             GObject.TYPE_STRING,
             'Path to GMM',
             'Path to speaker model in LIUM GMM format',
@@ -118,26 +118,38 @@ class GstPlugin(GstBase.BaseTransform):
 
     def do_set_property(self, prop, val):
         """Set plugin properties."""
-        if prop.name == 'split_thr':
+        if prop.name == 'split-thr':
             self.split_thr = val
-        if prop.name == 'energy_thr':
+        elif prop.name == 'energy-thr':
             self.energy_thr = val
-        if prop.name == 'blocksize':
-            self.blocksize = val
-        if prop.name == 'out_dir':
+        elif prop.name == 'out-dir':
             self.out_dir = val
+        elif prop.name == 'lium':
+            self.lium = val
+        elif prop.name == 'ubm':
+            self.ubm = val
+        elif prop.name == 'gmm':
+            self.gmm = val
+        else:
+            raise AttributeError("Unknown property %s" % prop.name)
 
     def do_get_property(self, prop):
         """Get plugin properties."""
         val = None
-        if prop.name == 'split_thr':
+        if prop.name == 'split-thr':
             val = self.split_thr
-        elif prop.name == 'energy_thr':
+        elif prop.name == 'energy-thr':
             val = self.energy_thr
-        elif prop.name == 'blocksize':
-            val = self.blocksize
-        elif prop.name == 'out_dir':
+        elif prop.name == 'out-dir':
             val = self.out_dir
+        elif prop.name == 'lium':
+            val = self.lium
+        elif prop.name == 'ubm':
+            val = self.ubm
+        elif prop.name == 'gmm':
+            val = self.gmm
+        else:
+            raise AttributeError("Unknown property %s" % prop.name)
         return val
 
     def do_transform_ip(self, buf):

@@ -9,6 +9,7 @@ from queue import Queue
 from importlib import import_module
 from threading import Thread
 
+print(sys.path)
 import gi
 gi.require_version('Gst', '1.0')
 from gi.repository import Gst, GLib
@@ -29,7 +30,7 @@ class Pipeliner(object):
         self.plugins = {}
         self.blk_q = Queue()
 
-        # Turn detection loop
+        # Initialize turn detector
         self.td = TurnDetector(blk_q=self.blk_q)
 
         # Load Gst launch config and build pipeline
@@ -37,13 +38,14 @@ class Pipeliner(object):
             cfg = yaml.load(open(_cfg))
             logger.debug("Creating test pipeline using conf: %s" % cfg)
             logger.debug("Test plugin is %s" % self.custom)
-            self.prep(cfg)
+            self.prepare(cfg)
         except Exception as e:
             sys.exit(type(e).__name__ + ': ' + str(e))
 
-    def prep(self, cfg):
-        """Prepare Gst pipeline from specified yaml config file."""
+    def prepare(self, cfg):
+        """Prepare Gst pipeline from config dictionary."""
         prev_element = None
+        # Create, set properties, and add elements to pipeline.
         for plugin, props in cfg.items():
             # make element if non-test plugin
             if plugin != self.custom:
@@ -51,8 +53,7 @@ class Pipeliner(object):
             else:
                 plugin_module = import_module(
                     'scribe.gst.python.' + props['type'])
-                element = plugin_module.GstPlugin()
-                self.element = element
+                element = plugin_module.StreamExtractor(self.blk_q)
 
             # set properties
             for k, v in props.items():
@@ -70,6 +71,7 @@ class Pipeliner(object):
             logger.debug("Adding %s to the pipeline with name %s" %
                          (props['type'], element.get_property('name')))
 
+        # Link elements in pipeline.
         for plugin, element in self.plugins.items():
             if prev_element:
                 logger.debug("Linking %s to %s" % (prev_plugin, plugin))
@@ -80,17 +82,14 @@ class Pipeliner(object):
                     prev_element.link(element)
             prev_plugin, prev_element = plugin, element
 
-        # setup signal handling
+        # Setup signal handling
         self.bus = self.pipeline.get_bus()
         self.bus.add_signal_watch()
         self.bus.enable_sync_message_emission()
         self.bus.connect('message::eos', self._on_eos)
         self.bus.connect('message::error', self._on_error)
 
-        # setup turn detector
-        self.td.start()
-
-        # set pipeline to ready
+        # Set pipeline to ready
         self.pipeline.set_state(Gst.State.READY)
         logger.info("Pipeline READY")
 
@@ -101,18 +100,21 @@ class Pipeliner(object):
     def _on_eos(self, _bus, _msg):
         self.td.stop()
         self.plugins['sink'].set_state(Gst.State.NULL)
-        self.plugins['sink'].set_state(Gst.State.PLAYING)
         self.pipeline.set_state(Gst.State.NULL)
 
     def _on_error(self, _bus, _msg):
         err, dbg = _msg.parse_error()
         logger.debug("%s: %s" % (_msg.src.get_name(), err.message))
-        self.on_eos(_bus, _msg)
+        self._on_eos(_bus, _msg)
 
     def play(self):
-        self.pipeline.set_state(Gst.State.PAUSED)
-        self.plugins['sink'].set_state(Gst.State.PLAYING)
+        #self.pipeline.set_state(Gst.State.PAUSED)
+        #self.plugins['sid'].set_state(Gst.State.PAUSED)
+        #self.plugins['sink'].set_state(Gst.State.PAUSED)
         self.pipeline.set_state(Gst.State.PLAYING)
+        #self.plugins['sid'].set_state(Gst.State.PLAYING)
+        #self.plugins['sink'].set_state(Gst.State.PLAYING)
+        #self.td.start()
 
         try:
             self.gst_loop.run()
