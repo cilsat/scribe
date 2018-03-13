@@ -52,7 +52,37 @@ class Buffer(object):
             self.idx -= idx
         return samples
 
+    def get_data(self):
+        return self.data[:self.idx]
+
     def is_full(self):
         """Return whether the buffer is full."""
         return self.idx == self.len
 
+    def is_empty(self):
+        """Return whether the buffer is empty."""
+        return self.idx == 0
+
+
+class ProcBuffer(Buffer):
+    def __init__(self, x, y, thr, dur):
+        Buffer.__init__(self, x, y)
+        self.thr = thr
+        self.dur = dur
+        self.num = 0
+        self.can = False
+
+    def eval_buffer(self, evaluator):
+        if not self.is_full():
+            return
+        elif evaluator(self.data) < self.thr:
+            self.num += 1
+            if self.can and self.num > self.dur:
+                self.can = False
+                return
+            else:
+                return
+        else:
+            self.num = 0
+            self.can = True
+            return

@@ -1,7 +1,7 @@
 # names must be unique!
 src:
   type: "filesrc"
-  location: "/home/cilsat/Dropbox/Audio/rand0.wav"
+  location: "/home/cilsat/dev/scribe/test/cluster/rand2.wav"
 parser:
   type: "wavparse"
 #decoder:

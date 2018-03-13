@@ -6,6 +6,10 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def enroll():
+    pass
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
     pipeline = Pipeliner('sid', 'test.yaml')

@@ -30,7 +30,10 @@ class Pipeliner(object):
         self.plugins = {}
 
         # Initialize turn detector
-        self.td = TurnDetector()
+        self.td = TurnDetector(energy_thr=6.0, sil_len_thr=0.35,
+                               lium='/home/cilsat/dev/prosa/scribe/lium/lium-8.4.1.jar',
+                               ubm='/home/cilsat/dev/prosa/scribe/lium/ubm.gmm',
+                               gmm='/home/cilsat/dev/prosa/scribe/lium/spk.gmm')
 
         # Load Gst launch config and build pipeline
         try:
@@ -94,9 +97,10 @@ class Pipeliner(object):
 
     def _connect_decoder(self, element, pad):
         pad.link(self.plugins['converter1'].get_static_pad("sink"))
-        logger.info("Connected audio decoder")
+        logger.debug("Connected audio decoder.")
 
     def _on_eos(self, _bus, _msg):
+        logger.debug("EOS reached.")
         self.plugins['sink'].set_state(Gst.State.NULL)
         self.pipeline.set_state(Gst.State.NULL)
 
@@ -106,22 +110,17 @@ class Pipeliner(object):
         self._on_eos(_bus, _msg)
 
     def play(self):
-        #self.pipeline.set_state(Gst.State.PAUSED)
-        #self.plugins['sid'].set_state(Gst.State.PAUSED)
-        #self.plugins['sink'].set_state(Gst.State.PAUSED)
         self.pipeline.set_state(Gst.State.PLAYING)
-        #self.plugins['sid'].set_state(Gst.State.PLAYING)
-        #self.plugins['sink'].set_state(Gst.State.PLAYING)
 
         try:
             self.td.start()
             self.gst_loop.run()
         except KeyboardInterrupt:
+            self.pipeline.set_state(Gst.State.PAUSED)
             self.pipeline.set_state(Gst.State.NULL)
             sys.exit(0)
         except Exception as e:
             sys.exit(type(e).__name__ + ': ' + str(e))
         finally:
-            self.gst_loop.quit()
             self.td.stop()
-
+            self.gst_loop.quit()

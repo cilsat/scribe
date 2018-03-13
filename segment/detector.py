@@ -10,14 +10,18 @@ from subprocess import run
 from threading import Thread
 from tempfile import mkstemp
 from queue import Queue
+from time import perf_counter
 from scipy.stats import multivariate_normal as mn
 from scipy.fftpack import dct
+from scipy.linalg import det, pinv
 from .features import FeatureGenerator
 from .buffer import Buffer
 
 SIG_VOICED = 0
 SIG_UNVOICED = 1
-SIG_SPLIT = 2
+SIG_SIL = 2
+SIG_SAME = 3
+SIG_TURN = 4
 
 logger = logging.getLogger(__name__)
 
@@ -27,17 +31,19 @@ class TurnDetector(object):
 
     def __init__(self, samplerate=16000, fb_size=20, num_cepstrals=13,
                  num_filters=40, energy_thr=6.0, sil_len_thr=0.25,
-                 block_size=2048, blk_q=Queue(), out_dir='/tmp', on_split=None,
+                 block_size=2048, out_dir='/tmp', on_sil=None, on_split=None,
                  lium='/home/cilsat/net/Files/lium_spkdiarization-8.4.1.jar',
                  ubm='/home/cilsat/src/kaldi-offline-transcriber/models/ubm.gmm',
-                 gmm='/home/cilsat/data/speech/rapat/gmm/120_rapat.gmm'):
+                 gmm='/home/cilsat/data/speech/rapat/gmm/120_rapat.gmm',
+                 loop=None, on_result=None):
         """Initialize with samplerate and sizes of internal buffers."""
         # main loop
         self.samplerate = samplerate
-        self.blk_q = blk_q
+        self.blk_q = asyncio.Queue(loop=loop)
         self.sentinel = object()
         self.out_dir = out_dir
         self._on_split = on_split or self.on_split
+        self._on_result = on_result or self.on_result
 
         # feature attributes
         self.num_cepstrals = num_cepstrals
@@ -45,11 +51,17 @@ class TurnDetector(object):
 
         # internal buffering
         # VAD requires around 200 ms of buffered LMFE feature frames.
-        self.vad_buf = Buffer(fb_size, num_filters)
+        self.vad_buf = Buffer(int(0.005 * self.samplerate), num_filters)
         # Sample buffer of unlimited size to store samples in block queue.
         self.smp_buf = []
-        # Turn buffer to analyze speaker changes
-        self.turn_buf = Buffer(10 * self.samplerate, num_cepstrals)
+        # Frame buffer of unlimited size to store frames of corresponding
+        # sample buffer.
+        self.turn_buf = Buffer(
+            int(0.02 * self.samplerate), num_cepstrals)
+        self.cur_turn = Buffer(
+            int(0.02 * self.samplerate), num_cepstrals)
+        self.prev_turn = Buffer(
+            int(0.02 * self.samplerate), num_cepstrals)
 
         # is_silent vars
         self.sil_sum = 0
@@ -84,100 +96,148 @@ class TurnDetector(object):
             self.can_split = True
         return False
 
-    def glr(self):
-        """Calculate GLR of current contents of frame buffer."""
-        if self.vad_buf.is_full():
-            return 0
-        half = int(0.5 * self.vad_buf.len)
-        fx = self.vad_buf.data[:half]
+    def glr(self, frame):
+        fx = self.turn_buf.get_data()
         mx = mn.logpdf(fx, np.mean(fx, axis=0), np.cov(fx, rowvar=False))
-        fy = self.vad_buf.data[half:]
+        fy = frame
         my = mn.logpdf(fy, np.mean(fy, axis=0), np.cov(fy, rowvar=False))
-        mz = mn.logpdf(self.vad_buf.data, np.mean(self.vad_buf.data, axis=0),
-                       np.cov(self.vad_buf.data, rowvar=False))
-        z = (mz.sum() - mx.sum() - my.sum()) / self.vad_buf.len
-        return z * 1.82
+        fz = np.vstack((self.turn_buf.data, frame))
+        mz = mn.logpdf(fz, np.mean(fz, axis=0), np.cov(fz, rowvar=False))
+        z = (mz.mean() - mx.mean() - my.mean()) / len(fz)
+        logger.debug("Lengths: %d %d %d" % (len(fx), len(fy), len(fz)))
+        return z
 
-    def is_voiced(self):
+    def glr2(self, data):
+        half = int(0.5 * len(data))
+        fx = data[:half]
+        fy = data[half:]
+        cx = np.cov(fx, rowvar=False)
+        cy = np.cov(fy, rowvar=False)
+        nx = len(fx)
+        ny = len(fy)
+        n = nx + ny
+        d1 = -0.5 * (nx * np.log(det(cx)) + ny * np.log(det(cy)))
+        d2 = np.log(det((nx * cx + ny * cy) / n))
+        return d1 - d2
+
+    def kl2(self, data):
+        half = int(0.5 * len(data))
+        fx = data[:half]
+        fy = data[half:]
+        cx = np.cov(fx, rowvar=False)
+        cy = np.cov(fy, rowvar=False)
+        dmxy = np.mean(fx, axis=0) - np.mean(fy, axis=0)
+        ix = pinv(cx)
+        iy = pinv(cy)
+        d = 0.5 * (np.trace((cx - cy) * (iy - ix)) +
+                   np.trace((ix + iy) * dmxy * dmxy.T))
+        return d
+
+    def bic(self, fx, fy, lambdac=1.4):
+        fz = np.vstack((fx, fy))
+        cx = np.cov(fx, rowvar=False)
+        cy = np.cov(fy, rowvar=False)
+        cz = np.cov(fz, rowvar=False)
+        mx = len(fx) * np.log(det(cx))
+        my = len(fy) * np.log(det(cy))
+        mz = len(fz) * np.log(det(cz))
+        d = 0.5 * (mz - mx - my)
+        p = fz.shape[1]
+        d -= lambdac * 0.5 * (p + 0.5 * p * (p + 1)) * np.log(len(fz))
+        return d
+
+    def is_voiced(self, blk):
         """Detect whether current contents of frame buffer is voiced."""
+        self.vad_buf.push(self.fg.lmfe(blk))
+        # logger.debug("%f", np.mean(self.vad_buf.data))
         if not self.vad_buf.is_full():
-            #logger.debug("Voiced: Buffer not full")
+            # logger.debug("Voiced: Buffer not full")
             return SIG_UNVOICED
         elif np.mean(self.vad_buf.data) < self.energy_thr:
-            #logger.debug("Voiced: SIL")
+            # logger.debug("Voiced: SIL")
             self.sil_sum += 1
             if self.can_split and self.sil_sum >= self.sil_len_thr:
                 self.can_split = False
-                return SIG_SPLIT
+                return SIG_SIL
             else:
                 return SIG_UNVOICED
         else:
-            #logger.debug("Voiced: %s" % np.mean(self.vad_buf.data))
             self.sil_sum = 0
             self.can_split = True
             return SIG_VOICED
 
+    def is_turn(self, blk):
+        """Detect whether turn buffer contains speech from more than 1 speaker.
+        """
+        self.turn_buf.push(self.fg.mfcc(blk, use_energy=False))
+        if not self.turn_buf.is_full():
+            return SIG_SAME
+        kl2 = self.kl2(self.turn_buf.data)
+        glr2 = self.glr2(self.turn_buf.data)
+        logger.debug("KL2: %f GLR2: %f" % (kl2, glr2))
+        if kl2 > 10:
+            self.turn_sum += 1
+        # if self.cur_turn.idx >= self.num_cepstrals:
+        #    if not self.prev_turn.is_empty():
+        #        bic = self.bic(self.prev_turn.get_data(),
+        #                       self.cur_turn.get_data())
+        #        logger.debug("BIC: %f" % bic)
+        #        if bic > 0:
+        #            # self._on_split(n, self.smp_buf)
+        #            self.smp_buf = []
+        #            self.prev_turn.pop()
+        #    self.prev_turn.push(self.cur_turn.pop())
+
     def start(self):
         """Start processing loop in separate thread."""
         loop = asyncio.get_event_loop()
-        logger.debug("Starting TurnDetector thread.")
         loop.run_until_complete(self.process_blocks(loop))
         loop.close()
 
-    def stop(self):
+    async def stop(self):
         """Stop processing loop by putting sentinel."""
         logger.debug("Stopping TurnDetector thread.")
-        self.blk_q.put(self.sentinel)
+        await self.blk_q.put(self.sentinel)
 
-    async def process_blocks(self, loop):
+    async def process_blocks(self):
         """Process contents of block queue until sentinel is found."""
+        logger.debug("Starting TurnDetector loop.")
         results = []
-        for n, data in enumerate(iter(self.blk_q.get, self.sentinel)):
-            timestamp, raw = data
-            blk = np.fromstring(raw, dtype=np.int16)
-            lmf = self.fg.lmfe(blk)
-            self.vad_buf.push(lmf)
-            #logger.debug("Pushed block %d of size %d into buffer at %s." % (n,
-            #             len(lmf), timestamp))
+        n = 0
+        while True:
+            data = await self.blk_q.get()
+            if data == self.sentinel:
+                break
+            await self.process_block(data)
+            n += 1
+            self.blk_q.task_done()
 
-            voiced = self.is_voiced()
-            if voiced == SIG_VOICED:
-                self.smp_buf.extend(blk)
-                mfcc = dct(lmf, type=2, axis=-1,
-                           norm='ortho')[:, :self.num_cepstrals]
-                self.turn_buf.push(mfcc)
-            elif voiced == SIG_SPLIT:
-                result = self._on_split(n)
-                results.append(result)
+    def process_block(self, block, last=False):
+        if last and len(self.smp_buf) > 0:
+            self._on_split(np.array(self.smp_buf))
+        data = np.fromstring(block, dtype=np.int16)
+        voiced = self.is_voiced(data)
+        if voiced == SIG_VOICED:
+            self.smp_buf.extend(data)
+            self.cur_turn.push(self.fg.mfcc(data, use_energy=False))
+        elif voiced == SIG_SIL:
+            self._on_split(np.array(self.smp_buf))
+            self.smp_buf = []
 
-        results.append(self._on_split(n))
-        return results
-
-    def on_split(self, blk_id):
-        """Write WAV with contents of sample buffer."""
-        fd, name = mkstemp(prefix=str(blk_id).zfill(4), suffix='.wav',
-                           dir=self.out_dir)
-        sf.write(name, self.smp_buf, samplerate=self.samplerate,
+    def on_split(self, samples):
+        """Define what to do when a low energy segment is detected."""
+        # Write samples to WAV.
+        fd, name = mkstemp(suffix='.wav', dir=self.out_dir)
+        sf.write(name, samples, samplerate=self.samplerate,
                  subtype='PCM_16')
 
-        num_frames = int(len(self.smp_buf) * 100 / self.samplerate)
+        num_frames = int(len(samples) * 100 / self.samplerate)
         spk_hyp = self.identify_speaker(name, num_frames, self.lium, self.ubm,
                                         self.gmm)
-        txt_hyp = self.recognize_speech(name,
-                                        '/home/cilsat/src/kaldi/src',
-                                        '/home/cilsat/src/kaldi-gstreamer-server/models')
-        end_smp = blk_id * self.block_size
-        start_smp = end_smp - len(self.smp_buf)
-        result = json.dumps({
-            'start': start_smp / self.samplerate,
-            'end': end_smp / self.samplerate,
-            'sid': spk_hyp,
-            'text': txt_hyp,
-        })
-        logger.debug("%s" % result)
+        self._on_result(spk_hyp)
 
-        self.smp_buf = []
-        return result
+    def on_result(self, result):
+        logger.debug("Received result: %s" % result)
 
     @staticmethod
     def identify_speaker(name, num_frames, lium, ubm, gmm):
@@ -193,8 +253,8 @@ class TurnDetector(object):
             'java', '-cp', lium,
             'fr.lium.spkDiarization.programs.Identification',
             '--sInputMask=' + init_seg, '--fInputMask=' + name,
-            '--sOutputMask=' + fin_seg,
             '--fInputDesc=audio16kHz2sphinx,1:3:2:0:0:0,13,1:1:300:4',
+            '--sOutputMask=' + fin_seg,
             '--tInputMask=' + gmm, '--sTop=5,' + ubm,
             '--sSetLabel=add', name
         ]
@@ -202,7 +262,7 @@ class TurnDetector(object):
             run(cmd, stderr=f)
         # Read results
         with open(fin_seg) as f:
-            hyp = int(f.read().split('#')[-1][1:-1])
+            hyp = f.read().split('#')[-1][:-1]
         return hyp
 
     @staticmethod
@@ -216,14 +276,14 @@ class TurnDetector(object):
         add_deltas = os.path.join(kaldi, 'featbin/add-deltas')
         gmm_latgen_faster = os.path.join(kaldi, 'gmmbin/gmm-latgen-faster')
 
-        #with open(scp, 'w') as f:
+        # with open(scp, 'w') as f:
         #    f.write(name.split('.')[0] + ' ' + name)
         # Call gmm-latgen-faster
         cmd = [
-            #compute_mfcc, 'scp:' + scp, 'ark:-|',
-            #add_deltas, 'ark:-', 'ark:-|',
-            #gmm_latgen_faster, '--word-symbol-table=' + txt, mdl, fst,
-            #'ark:-', 'ark:/dev/null', 'ark,t:' + out
+            # compute_mfcc, 'scp:' + scp, 'ark:-|',
+            # add_deltas, 'ark:-', 'ark:-|',
+            # gmm_latgen_faster, '--word-symbol-table=' + txt, mdl, fst,
+            # 'ark:-', 'ark:/dev/null', 'ark,t:' + out
             './decode_utt.sh', name, model
         ]
         with open(log_asr, 'a') as f:
@@ -232,4 +292,3 @@ class TurnDetector(object):
             hyp = [n.replace(name, '') for n in f.read().splitlines() if
                    n.startswith(name)][0]
         return hyp
-

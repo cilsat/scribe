@@ -53,8 +53,8 @@ class StreamExtractor(GstBase.BaseTransform):
         queue it and use it from a different thread.
         """
         timestamp = Gst.TIME_ARGS(buf.pts)
-        #logger.debug("timestamp(buffer):%s queue(buffer):%s" % (timestamp,
-        #             self.blk_q.qsize()))
+        logger.debug("timestamp(buffer):%s queue(buffer):%s" % (timestamp,
+                                                                self.blk_q.qsize()))
         res, bmap = buf.map(Gst.MapFlags.READ)
         self.blk_q.put((timestamp, bmap.data))
 
@@ -63,4 +63,3 @@ class StreamExtractor(GstBase.BaseTransform):
 
 GObject.type_register(StreamExtractor)
 __gstelementfactory__ = ("streamextractor", Gst.Rank.NONE, StreamExtractor)
-
